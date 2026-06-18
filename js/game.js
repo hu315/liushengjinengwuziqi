@@ -218,6 +218,10 @@ function bindAllEvents(){
                 if(window.extra > 0){
                     window.phase = "gamblerDrop";
                     setStatus(`${window.wheelResult}\n获得 ${window.extra} 次落子机会，点击棋盘落子`);
+                    // AI自动落子
+                    if(window.D[window.cur].s === "redSpider" || (window.mode === "ai" && window.cur === W)){
+                        setTimeout(()=>autoPlay(window.cur), 500);
+                    }
                 } else {
                     endTurn();
                 }
@@ -682,11 +686,6 @@ function drop(x, y){
         setStatus(`沉淀爆发！还需放置 ${window.D[window.cur].dr} 颗`);
         window.st.classList.add("glow");
         upUI();
-        if(window.D[window.cur].s === "redSpider"){
-            setTimeout(()=>autoPlay(window.cur), 500);
-        } else if(window.mode==="ai" && window.cur===W){
-            setTimeout(()=>autoPlay(W), 500);
-        }
         willEndTurn = false;
     }
     
@@ -695,7 +694,14 @@ function drop(x, y){
         send("move", {x, y, endTurn: willEndTurn});
     }
     
-    if(willEndTurn) endTurn();
+    if(willEndTurn) {
+        endTurn();
+    } else {
+        // AI自动继续落子
+        if(window.D[window.cur].s === "redSpider" || (window.mode === "ai" && window.cur === W)){
+            setTimeout(()=>autoPlay(window.cur), 500);
+        }
+    }
 }
 
 function sedDrop(x, y){
@@ -712,11 +718,6 @@ function sedDrop(x, y){
     window.D[window.cur].dr--;
     if(window.D[window.cur].dr > 0){
         setStatus(`沉淀爆发！还需放置 ${window.D[window.cur].dr} 颗`);
-        if(window.D[window.cur].s === "redSpider"){
-            setTimeout(()=>autoPlay(window.cur), 500);
-        } else if(window.mode==="ai" && window.cur===W){
-            setTimeout(()=>autoPlay(W), 500);
-        }
     } else {
         window.D[window.cur].se = 0;
         window.phase = "normal";
@@ -728,7 +729,14 @@ function sedDrop(x, y){
         send("move", {x, y, endTurn: willEndTurn});
     }
     
-    if(willEndTurn) endTurn();
+    if(willEndTurn) {
+        endTurn();
+    } else {
+        // AI自动继续落子
+        if(window.D[window.cur].s === "redSpider" || (window.mode === "ai" && window.cur === W)){
+            setTimeout(()=>autoPlay(window.cur), 500);
+        }
+    }
     upUI();
 }
 
@@ -754,7 +762,14 @@ function gamblerDrop(x, y){
         send("move", {x, y, endTurn: willEndTurn});
     }
     
-    if(willEndTurn) endTurn();
+    if(willEndTurn) {
+        endTurn();
+    } else {
+        // AI自动继续落子
+        if(window.D[window.cur].s === "redSpider" || (window.mode === "ai" && window.cur === W)){
+            setTimeout(()=>autoPlay(window.cur), 500);
+        }
+    }
 }
 
 // 爆破
@@ -809,15 +824,19 @@ function castD(){
     if(myTurn() && window.mode!=="local") send("domain", window.cur);
     openD(window.cur, 1);
 }
+// 修复：领域不强制结束回合，保留额外落子供消耗
 function openD(o, isC){
     window.dom = {a:1, o, l:8};
     window.be.classList.add("domain");
     if(isC){
         window.D[window.cur].c--;
         window.extra += 1;
-        setStatus("领域开启！敌方技能封禁8回合，+1次落子");
+        setStatus("领域开启！获得1次额外落子机会，请落子");
         upUI();
-        endTurn();
+        // AI自动触发落子
+        if(window.D[window.cur].s === "redSpider" || (window.mode === "ai" && window.cur === W)){
+            setTimeout(()=>autoPlay(window.cur), 500);
+        }
     }
 }
 function closeD(){
@@ -908,15 +927,60 @@ function updateStatusText(){
     setStatus(txt);
 }
 
-// ========== AI逻辑 ==========
+// ========== AI统一落子计算 ==========
+function getBestMove(pl, mistakeRate = 0){
+    // 随机失误逻辑
+    if(Math.random() < mistakeRate){
+        const empties = [];
+        for(let y=0; y<S; y++) for(let x=0; x<S; x++){
+            if(window.board[y][x]===EMP) empties.push({x,y});
+        }
+        if(empties.length) return empties[Math.floor(Math.random()*empties.length)];
+    }
+
+    // 评分计算
+    const diff = window.challengeMode && pl===W ? window.currentDifficulty : 5;
+    const defWeight = [0.5,0.6,0.8,1,1,1.1,1.2,1.3,1.4,1.5][diff-1] || 1;
+    let best = -Infinity, ms = [];
+    const enemy = pl === B ? W : B;
+    for(let y=0; y<S; y++){
+        for(let x=0; x<S; x++){
+            if(window.board[y][x] !== EMP) continue;
+            const sc = ev(x,y,pl) + ev(x,y,enemy) * defWeight * 0.95;
+            if(sc > best){ best = sc; ms = [{x,y}]; }
+            else if(sc === best) ms.push({x,y});
+        }
+    }
+    return ms.length ? ms[Math.floor(Math.random() * ms.length)] : null;
+}
+
+// ========== AI逻辑（全阶段自动落子） ==========
 function autoPlay(pl){
-    if(window.over || window.phase !== "normal") return;
+    if(window.over || window.cur !== pl) return;
+
+    // 1. 沉淀爆发阶段：连续自动落子
+    if(window.phase === "sedimentBurst"){
+        const pos = getBestMove(pl);
+        if(pos) sedDrop(pos.x, pos.y);
+        return;
+    }
+
+    // 2. 赌徒额外落子阶段：连续自动落子
+    if(window.phase === "gamblerDrop"){
+        const pos = getBestMove(pl);
+        if(pos) gamblerDrop(pos.x, pos.y);
+        return;
+    }
+
+    // 3. 普通回合阶段
+    if(window.phase !== "normal") return;
+
     const diff = window.challengeMode && pl===W ? window.currentDifficulty : 5;
     const mistakeRate = [0.4,0.25,0.15,0.05,0,0,0,0,0,0][diff-1] || 0;
     const skillObj = window.D[pl].s === "redSpider" ? window.D[pl].skills : null;
     const mainSkill = window.D[pl].s;
 
-    // 技能释放
+    // 技能释放判断
     if(!(window.dom.a && window.dom.o !== pl) && Math.random() < [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9][diff-1]){
         if(mainSkill === "redSpider"){
             const skills = [];
@@ -970,34 +1034,13 @@ function autoPlay(pl){
         }
     }
 
-    // 随机失误
-    if(Math.random() < mistakeRate){
-        const empties = [];
-        for(let y=0; y<S; y++) for(let x=0; x<S; x++){
-            if(window.board[y][x]===EMP) empties.push({x,y});
-        }
-        if(empties.length){
-            const p = empties[Math.floor(Math.random()*empties.length)];
-            drop(p.x, p.y);
-            return;
-        }
-    }
+    // 普通落子
+    const pos = getBestMove(pl, mistakeRate);
+    if(pos) drop(pos.x, pos.y);
 
-    // 评分落子
-    const defWeight = [0.5,0.6,0.8,1,1,1.1,1.2,1.3,1.4,1.5][diff-1] || 1;
-    let best = -Infinity, ms = [];
-    const enemy = pl === B ? W : B;
-    for(let y=0; y<S; y++){
-        for(let x=0; x<S; x++){
-            if(window.board[y][x] !== EMP) continue;
-            const sc = ev(x,y,pl) + ev(x,y,enemy) * defWeight * 0.95;
-            if(sc > best){ best = sc; ms = [{x,y}]; }
-            else if(sc === best) ms.push({x,y});
-        }
-    }
-    if(ms.length){
-        const m = ms[Math.floor(Math.random() * ms.length)];
-        drop(m.x, m.y);
+    // 落子后检查是否还有剩余额外次数，有则继续落子
+    if(window.extra > 0 && window.phase === "normal" && !window.over && window.cur === pl){
+        setTimeout(()=>autoPlay(pl), 500);
     }
 }
 
@@ -1285,8 +1328,8 @@ function setup(){
                 endTurn();
             }
         } else if(d.type === "domain"){
+            // 修复：对方开领域不提前结束回合，对方会自己落子同步
             openD(d.payload, 0);
-            endTurn();
         }
     });
     window.conn.on("close", () => {
