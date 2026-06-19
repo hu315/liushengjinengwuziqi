@@ -73,9 +73,11 @@ function bindAllEvents(){
                 selSkill();
             } else if(m === "create"){
                 if(typeof Peer === "undefined") return alert("联机组件加载失败，请检查网络后刷新");
+                if(!Account.currentUser) return alert("请先登录账号再使用联机功能");
                 createRoom();
             } else {
                 if(typeof Peer === "undefined") return alert("联机组件加载失败，请检查网络后刷新");
+                if(!Account.currentUser) return alert("请先登录账号再使用联机功能");
                 $("joinArea").style.display = "block";
             }
         };
@@ -97,7 +99,7 @@ function bindAllEvents(){
             } else if(window.mode === "online"){
                 const me = window.host ? B : W;
                 setPlayerSkill(me, s);
-                send("ss", s);
+                sendGame("ss", s);
                 upDesc(); upUI();
                 $("skillTip").textContent = "已选择完成，等待对方选择技能...";
                 const o = window.host ? W : B;
@@ -149,7 +151,7 @@ function bindAllEvents(){
         if(window.D[window.cur].se >= getSedMax(window.cur)) return setStatus(`沉淀已达上限（${getSedMax(window.cur)}层）`);
         if(window.cur===B && !total()) return setStatus("首回合禁止使用沉淀");
         window.D[window.cur].se++;
-        if(myTurn() && window.mode!=="local") send("skill", {name:"sediment"});
+        if(myTurn() && window.mode!=="local") sendGame("skill", {name:"sediment"});
         setStatus(`沉淀蓄力成功，当前${window.D[window.cur].se}/${getSedMax(window.cur)}层`);
         window.st.classList.add("glow");
         setTimeout(()=>window.st.classList.remove("glow"), 800);
@@ -253,7 +255,7 @@ function bindAllEvents(){
         setStatus(window.wheelResult || `当前回合：${window.cur===B?"黑方":"白方"}`);
     };
     $("btnBack").onclick = ()=>{
-        if(window.peer){ window.peer.destroy(); window.peer = null; window.conn = null; }
+        if(window.peer){ try{ window.peer.destroy(); }catch(e){} window.peer = null; window.conn = null; }
         $("challengeBar").style.display = "none";
         $("modeModal").classList.add("show");
         $("createArea").style.display = "none";
@@ -269,15 +271,11 @@ function bindAllEvents(){
     };
     $("joinBtn").onclick = ()=>{
         const r = $("joinInput").value.trim();
-        if(!r) return alert("请输入房间号");
+        if(!r) return alert("请输入对方6位玩家ID");
+        if(!/^\d{6}$/.test(r)) return alert("请输入正确的6位玩家ID");
         window.host = 0;
         window.mode = "online";
-        window.peer = new Peer();
-        window.peer.on("open", ()=>{
-            window.conn = window.peer.connect(r);
-            window.conn.on("open", ()=>{ setup(); $("modeModal").classList.remove("show"); selSkill(); });
-        });
-        window.peer.on("error", e => alert("加入失败：" + e.type));
+        initPeerConnection(r, false);
     };
 }
 
@@ -564,18 +562,14 @@ function cannonAttack(x0, y0, xt, yt){
     setStatus("炮攻击成功");
     
     // 修复：炮攻击后检测胜利
-    if(checkWin(xt, yt, window.cur)){
-        if(myTurn() && window.mode!=="local"){
-            send("skill", {name:"cannonAttack", x0, y0, xt, yt, win: true});
-        }
-        endGame(window.cur);
-        return;
-    }
+    const win = checkWin(xt, yt, window.cur);
     
     // 联机同步
     if(myTurn() && window.mode!=="local"){
-        send("skill", {name:"cannonAttack", x0, y0, xt, yt, win: false});
+        sendGame("skill", {name:"cannonAttack", x0, y0, xt, yt, win});
     }
+    
+    if(win) return endGame(window.cur);
     setTimeout(endTurn, 600);
 }
 function placeCannon(x, y){
@@ -583,7 +577,7 @@ function placeCannon(x, y){
     window.board[y][x] = window.cur===B ? B_CANNON : W_CANNON;
     window.D[window.cur].c--;
     window.phase = "normal";
-    if(myTurn() && window.mode!=="local") send("skill", {name:"cannon", x, y});
+    if(myTurn() && window.mode!=="local") sendGame("skill", {name:"cannon", x, y});
     setStatus("炮召唤成功，下回合可攻击");
     render(); upUI();
     endTurn();
@@ -638,7 +632,7 @@ function execSitKill(){
     
     // 联机同步
     if(myTurn() && window.mode!=="local"){
-        send("skill", {name:"sitKill", removed: allRemoved, win});
+        sendGame("skill", {name:"sitKill", removed: allRemoved, win});
     }
     
     if(win) return endGame(window.cur);
@@ -702,7 +696,7 @@ function placeCopy(x, y){
     
     // 联机同步
     if(myTurn() && window.mode!=="local"){
-        send("skill", {name:"copy", targets: ts, win});
+        sendGame("skill", {name:"copy", targets: ts, win});
     }
     
     if(win) return endGame(window.cur);
@@ -716,8 +710,9 @@ function drop(x, y){
     window.board[y][x] = window.cur;
     render();
     
-    if(checkWin(x, y, window.cur)){
-        if(myTurn() && window.mode!=="local") send("move", {x, y, endTurn: false, win: true});
+    const win = checkWin(x, y, window.cur);
+    if(win){
+        if(myTurn() && window.mode!=="local") sendGame("move", {x, y, endTurn: false, win: true});
         return endGame(window.cur);
     }
     
@@ -737,7 +732,7 @@ function drop(x, y){
     
     // 同步落子+回合标记
     if(myTurn() && window.mode!=="local"){
-        send("move", {x, y, endTurn: willEndTurn, win: false});
+        sendGame("move", {x, y, endTurn: willEndTurn, win: false});
     }
     
     if(willEndTurn) {
@@ -755,8 +750,9 @@ function sedDrop(x, y){
     window.board[y][x] = window.cur;
     render();
     
-    if(checkWin(x, y, window.cur)){
-        if(myTurn() && window.mode!=="local") send("move", {x, y, endTurn: false, win: true});
+    const win = checkWin(x, y, window.cur);
+    if(win){
+        if(myTurn() && window.mode!=="local") sendGame("move", {x, y, endTurn: false, win: true});
         return endGame(window.cur);
     }
     
@@ -772,7 +768,7 @@ function sedDrop(x, y){
     }
     
     if(myTurn() && window.mode!=="local"){
-        send("move", {x, y, endTurn: willEndTurn, win: false});
+        sendGame("move", {x, y, endTurn: willEndTurn, win: false});
     }
     
     if(willEndTurn) {
@@ -791,8 +787,9 @@ function gamblerDrop(x, y){
     window.board[y][x] = window.cur;
     render();
     
-    if(checkWin(x, y, window.cur)){
-        if(myTurn() && window.mode!=="local") send("move", {x, y, endTurn: false, win: true});
+    const win = checkWin(x, y, window.cur);
+    if(win){
+        if(myTurn() && window.mode!=="local") sendGame("move", {x, y, endTurn: false, win: true});
         return endGame(window.cur);
     }
     
@@ -805,7 +802,7 @@ function gamblerDrop(x, y){
     }
     
     if(myTurn() && window.mode!=="local"){
-        send("move", {x, y, endTurn: willEndTurn, win: false});
+        sendGame("move", {x, y, endTurn: willEndTurn, win: false});
     }
     
     if(willEndTurn) {
@@ -826,7 +823,7 @@ function placeB(x, y, isC){
     if(isC){
         window.D[window.cur].c--;
         window.phase = "normal";
-        if(myTurn() && window.mode!=="local") send("skill", {name:"blast", x, y});
+        if(myTurn() && window.mode!=="local") sendGame("skill", {name:"blast", x, y});
         setStatus("爆破标记已放置");
         render(); upUI();
         endTurn();
@@ -851,9 +848,9 @@ function castT(){
     
     // 胜利检测
     let win = false;
-    hit.forEach(p => {
-        window.board[p.y][p.x] = EMP;
-    });
+    // 临时移除棋子检测
+    const backup = hit.map(p => ({...p, v: window.board[p.y][p.x]}));
+    hit.forEach(p => window.board[p.y][p.x] = EMP);
     for(let y=0; y<S; y++){
         for(let x=0; x<S; x++){
             if(isOwn(window.board[y][x], window.cur) && checkWin(x, y, window.cur)){
@@ -862,16 +859,10 @@ function castT(){
         }
         if(win) break;
     }
-    // 恢复棋盘，等execT统一处理
-    hit.forEach(p => {
-        window.board[p.y][p.x] = window.cur === B ? W : B;
-    });
-    // 重新赋值为原值
-    hit.forEach(p => {
-        window.board[p.y][p.x] = EMP;
-    });
+    // 恢复，等execT统一处理
+    backup.forEach(p => window.board[p.y][p.x] = p.v);
     
-    if(myTurn() && window.mode!=="local") send("skill", {name:"thunder", hit, all, win});
+    if(myTurn() && window.mode!=="local") sendGame("skill", {name:"thunder", hit, all, win});
     execT(hit, all, 1, win);
 }
 function execT(hit, all, isC, win = false){
@@ -891,7 +882,7 @@ function execT(hit, all, isC, win = false){
 // 领域
 function castD(){
     if(window.dom.a) return setStatus("领域已开启");
-    if(myTurn() && window.mode!=="local") send("domain", window.cur);
+    if(myTurn() && window.mode!=="local") sendGame("domain", window.cur);
     openD(window.cur, 1);
 }
 // 修复：领域不强制结束回合，保留额外落子供消耗
@@ -1104,7 +1095,6 @@ function autoPlay(pl){
             // AI使用炮
             if(mainSkill === "cannon" && window.D[pl].c > 0 && total() > 6){
                 if(Math.random() < 0.3){
-                    // 找空位放炮
                     const empties = [];
                     for(let y=3; y<S-3; y++) for(let x=3; x<S-3; x++){
                         if(window.board[y][x] === EMP) empties.push({x,y});
@@ -1327,115 +1317,236 @@ function backToMenu(){
     setStatus("请选择游戏模式");
 }
 
-// ========== 联机功能（全同步修复） ==========
+// ========== 联机功能（优化版） ==========
 function createRoom(){
     window.host = 1;
     window.mode = "online";
-    window.peer = new Peer();
+    initPeerConnection(null, true);
+}
+
+// 优化版Peer连接初始化
+function initPeerConnection(targetId, isHost){
+    // 状态提示
+    showConnStatus("connecting", "连接中...");
+
+    // 如果已有实例先销毁
+    if(window.peer){
+        try{ window.peer.destroy(); } catch(e){}
+        window.peer = null;
+    }
+
+    // 优化配置：多STUN + TURN，提升远距离连接成功率
+    window.peer = new Peer(Account.currentUser.userId, {
+        host: '0.peerjs.com',
+        port: 443,
+        path: '/',
+        secure: true,
+        debug: 0,
+        config: {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun3.l.google.com:19302' },
+                { urls: 'stun:stun.qq.com:3478' },
+                { urls: 'stun:stun.miwifi.com:3478' },
+                // 公共TURN中继，打洞失败时兜底
+                { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+                { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+            ],
+            iceCandidatePoolSize: 10
+        }
+    });
+
+    // 15秒超时
+    const timeout = setTimeout(() => {
+        showConnStatus("failed", "连接超时，请重试");
+        try{ window.peer.destroy(); } catch(e){}
+    }, 15000);
+
     window.peer.on("open", id => {
-        $("createArea").style.display = "block";
-        $("roomId").textContent = id;
-    });
-    window.peer.on("connection", c => {
-        window.conn = c;
-        setup();
-        $("modeModal").classList.remove("show");
-        selSkill();
-    });
-    window.peer.on("error", e => alert("创建失败：" + e.type));
-}
-
-function setup(){
-    window.conn.on("data", d => {
-        if(d.type === "move"){
-            // 对方落子，直接更新棋盘
-            window.board[d.payload.y][d.payload.x] = window.cur;
-            render();
-            // 胜利检测
-            if(d.payload.win || checkWin(d.payload.x, d.payload.y, window.cur)){
-                endGame(window.cur);
-                return;
-            }
-            // 对方标记结束回合才切换
-            if(d.payload.endTurn) endTurn();
-        } else if(d.type === "ss"){
-            const o = window.host ? W : B;
-            setPlayerSkill(o, d.payload);
-            upDesc(); upUI();
-            const me = window.host ? B : W;
-            if(window.D[me].s && window.phase === "skillSelect"){
-                $("skillModal").classList.remove("show");
-                window.phase = "normal";
-                ready();
-            }
-        } else if(d.type === "skill"){
-            const s = d.payload;
-            if(s.name === "blast"){
-                // 修复：同步扣减对方技能次数
-                window.D[window.cur].c--;
-                placeB(s.x, s.y, 0);
-                upUI();
-                endTurn();
-            } else if(s.name === "cannon"){
-                window.board[s.y][s.x] = window.cur === B ? B_CANNON : W_CANNON;
-                window.D[window.cur].c--;
-                render();
-                upUI();
-                endTurn();
-            } else if(s.name === "sediment"){
-                window.D[window.cur].se++;
-                upUI();
-                endTurn();
-            } else if(s.name === "thunder"){
-                window.D[window.cur].c--;
-                execT(s.hit, s.all, 0);
-                upUI();
-                if(s.win) return endGame(window.cur);
-                setTimeout(endTurn, 400);
-            } else if(s.name === "copy"){
-                window.D[window.cur].c--;
-                s.targets.forEach(t => window.board[t.y][t.x] = window.cur);
-                render();
-                addFx(s.targets, "copy", 500);
-                upUI();
-                if(s.win) return endGame(window.cur);
-                endTurn();
-            } else if(s.name === "sitKill"){
-                window.D[window.cur].c--;
-                s.removed.forEach(p => window.board[p.y][p.x] = EMP);
-                window.bombs = window.bombs.filter(b => !s.removed.some(h => h.x===b.x && h.y===b.y));
-                render();
-                addFx(s.removed, "blast", 500);
-                upUI();
-                if(s.win) return endGame(window.cur);
-                setTimeout(endTurn, 600);
-            } else if(s.name === "cannonAttack"){
-                const type = window.cur===B ? B_CANNON : W_CANNON;
-                window.board[s.yt][s.xt] = EMP;
-                window.board[s.y0][s.x0] = EMP;
-                window.board[s.yt][s.xt] = type;
-                render();
-                addFx([{x:s.xt, y:s.yt}], "blast", 500);
-                if(s.win) return endGame(window.cur);
-                setTimeout(endTurn, 600);
-            }
-        } else if(d.type === "domain"){
-            window.D[window.cur].c--;
-            openD(d.payload, 0);
-            upUI();
+        clearTimeout(timeout);
+        if(isHost){
+            $("createArea").style.display = "block";
+            $("roomId").textContent = Account.currentUser.userId;
+        } else {
+            // 加入方发起连接
+            window.conn = window.peer.connect(targetId, {reliable: true});
+            bindConnectionEvents(window.conn);
         }
     });
-    window.conn.on("close", () => {
+
+    // 房主监听连接
+    if(isHost){
+        window.peer.on("connection", c => {
+            window.conn = c;
+            bindConnectionEvents(c);
+            $("modeModal").classList.remove("show");
+            selSkill();
+        });
+    }
+
+    window.peer.on("error", err => {
+        clearTimeout(timeout);
+        console.error("Peer错误:", err);
+        if(err.type === "unavailable-id"){
+            // ID冲突，重新生成（极小概率）
+            const newId = Math.floor(100000 + Math.random() * 900000).toString();
+            Account.currentUser.userId = newId;
+            localStorage.setItem("currentUser", JSON.stringify(Account.currentUser));
+            $("myUserId").textContent = newId;
+            initPeerConnection(targetId, isHost);
+        } else {
+            showConnStatus("failed", "连接失败：" + err.type);
+        }
+    });
+
+    window.peer.on("close", () => {
+        showConnStatus("failed", "连接已断开");
+    });
+}
+
+// 绑定连接事件（统一处理游戏+聊天消息）
+function bindConnectionEvents(conn){
+    conn.on("open", () => {
+        showConnStatus("connected", "已连接");
+        // 如果是加入方，连接成功后进入技能选择
+        if(!window.host){
+            $("modeModal").classList.remove("show");
+            selSkill();
+        }
+    });
+
+    conn.on("data", d => {
+        // 统一消息分发
+        if(d.type === "chat"){
+            Chat.receive(d.data);
+        } else if(d.type === "game"){
+            handleGameMessage(d.data);
+        }
+    });
+
+    conn.on("close", () => {
+        showConnStatus("failed", "对方已断开");
         if(!window.over){
-            alert("对方已断开连接");
-            $("btnBack").click();
+            setTimeout(()=>{
+                alert("对方已断开连接");
+                $("btnBack").click();
+            }, 1000);
         }
+    });
+
+    conn.on("error", err => {
+        showConnStatus("failed", "连接出错");
+        console.error("连接错误:", err);
     });
 }
 
-function send(t, payload){
-    if(!window.conn) return;
-    window.conn.send({type: t, payload});
+// 统一发送游戏消息
+function sendGame(type, payload){
+    if(!window.conn || !window.conn.open) return;
+    window.conn.send({type: "game", data: {type, payload}});
+}
+
+// 处理游戏消息
+function handleGameMessage(d){
+    if(d.type === "move"){
+        window.board[d.payload.y][d.payload.x] = window.cur;
+        render();
+        if(d.payload.win || checkWin(d.payload.x, d.payload.y, window.cur)){
+            endGame(window.cur);
+            return;
+        }
+        if(d.payload.endTurn) endTurn();
+    } else if(d.type === "ss"){
+        const o = window.host ? W : B;
+        setPlayerSkill(o, d.payload);
+        upDesc(); upUI();
+        const me = window.host ? B : W;
+        if(window.D[me].s && window.phase === "skillSelect"){
+            $("skillModal").classList.remove("show");
+            window.phase = "normal";
+            ready();
+        }
+    } else if(d.type === "skill"){
+        const s = d.payload;
+        if(s.name === "blast"){
+            window.D[window.cur].c--;
+            placeB(s.x, s.y, 0);
+            upUI();
+            endTurn();
+        } else if(s.name === "cannon"){
+            window.board[s.y][s.x] = window.cur === B ? B_CANNON : W_CANNON;
+            window.D[window.cur].c--;
+            render(); upUI();
+            endTurn();
+        } else if(s.name === "sediment"){
+            window.D[window.cur].se++;
+            upUI();
+            endTurn();
+        } else if(s.name === "thunder"){
+            window.D[window.cur].c--;
+            execT(s.hit, s.all, 0);
+            upUI();
+            if(s.win) return endGame(window.cur);
+            setTimeout(endTurn, 400);
+        } else if(s.name === "copy"){
+            window.D[window.cur].c--;
+            s.targets.forEach(t => window.board[t.y][t.x] = window.cur);
+            render();
+            addFx(s.targets, "copy", 500);
+            upUI();
+            if(s.win) return endGame(window.cur);
+            endTurn();
+        } else if(s.name === "sitKill"){
+            window.D[window.cur].c--;
+            s.removed.forEach(p => window.board[p.y][p.x] = EMP);
+            window.bombs = window.bombs.filter(b =>!s.removed.some(h => h.x===b.x && h.y===b.y));
+            render();
+            addFx(s.removed, "blast", 500);
+            upUI();
+            if(s.win) return endGame(window.cur);
+            setTimeout(endTurn, 600);
+        } else if(s.name === "cannonAttack"){
+            const type = window.cur===B ? B_CANNON : W_CANNON;
+            window.board[s.yt][s.xt] = EMP;
+            window.board[s.y0][s.x0] = EMP;
+            window.board[s.yt][s.xt] = type;
+            render();
+            addFx([{x:s.xt, y:s.yt}], "blast", 500);
+            if(s.win) return endGame(window.cur);
+            setTimeout(endTurn, 600);
+        }
+    } else if(d.type === "domain"){
+        window.D[window.cur].c--;
+        openD(d.payload, 0);
+        upUI();
+    }
+}
+
+// 连接状态提示
+function showConnStatus(type, text){
+    let el = document.getElementById("connStatus");
+    if(!el){
+        el = document.createElement("div");
+        el.id = "connStatus";
+        el.className = "conn-status";
+        document.body.appendChild(el);
+    }
+    el.className = "conn-status " + type;
+    el.textContent = text;
+    if(type === "connected"){
+        setTimeout(()=> el.style.opacity = "0", 2000);
+    } else {
+        el.style.opacity = "1";
+    }
+}
+
+// 判断是否己方回合
+function myTurn(){
+    if(window.mode !== "online") return true;
+    const me = window.host ? B : W;
+    return window.cur === me;
 }
 
 // 累计游玩人次

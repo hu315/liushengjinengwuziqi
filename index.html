@@ -104,9 +104,73 @@
 </div>
 <button id="spinBtn">开始转动</button>
 </div></div>
+    <!-- 登录注册弹窗 -->
+<div class="modal" id="loginModal">
+    <div class="modal-box">
+        <h3>账号登录</h3>
+        <div class="tab-group">
+            <div class="tab active" data-tab="login">登录</div>
+            <div class="tab" data-tab="register">注册</div>
+        </div>
+        <div class="tab-content" id="loginTab">
+            <input class="input" id="loginUser" placeholder="用户名">
+            <input class="input" id="loginPwd" type="password" placeholder="密码">
+            <button class="btn mode" id="btnLogin">登录</button>
+        </div>
+        <div class="tab-content" id="registerTab" style="display:none">
+            <input class="input" id="regUser" placeholder="用户名">
+            <input class="input" id="regPwd" type="password" placeholder="密码">
+            <input class="input" id="regPwd2" type="password" placeholder="确认密码">
+            <button class="btn mode" id="btnRegister">注册并自动生成ID</button>
+            <p style="font-size:12px;color:#666;margin-top:8px">系统将自动分配6位数字ID，用于添加好友和联机对战</p>
+        </div>
+        <p id="loginTip" style="color:#e74c3c;font-size:13px;margin-top:10px"></p>
+    </div>
+</div>
 
-<script src="js/config.js"></script>
-<script src="js/utils.js"></script>
-<script src="js/game.js"></script>
+<!-- 好友侧边栏 -->
+<div class="friend-panel">
+    <div class="friend-header">
+        <span>好友列表</span>
+        <button class="btn-add" id="btnAddFriend">+ 添加</button>
+    </div>
+    <div class="friend-list" id="friendList"></div>
+    <div class="user-info">
+        <span>我的ID: <b id="myUserId"></b></span>
+        <button class="btn-logout" id="btnLogout">退出</button>
+    </div>
+</div>
+
+<!-- 聊天窗口 -->
+<div class="chat-window" id="chatWindow" style="display:none">
+    <div class="chat-header">
+        <span id="chatTargetName">好友</span>
+        <button class="chat-close" id="chatClose">×</button>
+    </div>
+    <div class="chat-body" id="chatBody"></div>
+    <div class="chat-input">
+        <input id="chatInput" placeholder="输入消息...">
+        <button id="btnSendChat">发送</button>
+    </div>
+</div>
+
+<!-- 添加好友弹窗 -->
+<div class="modal" id="addFriendModal">
+    <div class="modal-box" style="min-width:280px">
+        <h3>添加好友</h3>
+        <input class="input" id="friendIdInput" placeholder="输入对方6位ID">
+        <input class="input" id="friendRemark" placeholder="备注名（可选）">
+        <p id="addFriendTip" style="color:#e74c3c;font-size:13px"></p>
+        <div class="btn-group">
+            <button class="btn cancel" id="cancelAddFriend">取消</button>
+            <button class="btn mode" id="confirmAddFriend">添加</button>
+        </div>
+    </div>
+</div>
+    <script src="js/config.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/account.js"></script>
+    <script src="js/chat.js"></script>
+    <script src="js/game.js"></script>
 </body>
 </html>
