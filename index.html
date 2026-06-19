@@ -12,33 +12,50 @@
 <div class="watermark">刘</div>
 <div class="container">
 <h1>技能五子棋</h1>
-<div class="challenge-bar" id="challengeBar">
-  <div><b>困难模式</b> · 难度 <span id="diffText">5</span></div>
-  <div class="progress-dots"><div class="dot" id="dot1">1</div><div class="dot" id="dot2">2</div><div class="dot" id="dot3">3</div></div>
-  <div class="buff-list" id="buffList"></div>
-</div>
-<div id="status" class="status-black">请选择游戏模式</div>
-<div class="player-stats">
-<div id="bs" class="stat black"><h3>黑方（先手）</h3><p>次数：<span id="bc">-</span></p><div class="skill-desc" id="bd">未选择技能</div></div>
-<div id="ws" class="stat white"><h3>白方（后手）</h3><p>次数：<span id="wc">-</span></p><div class="skill-desc" id="wd">未选择技能</div></div>
-</div>
-<div class="main">
-<div id="board" class="board"></div>
-<div class="skills">
-<h3>技能面板</h3>
-<button id="btnBlast" class="btn skill">爆破专家</button>
-<button id="btnCopy" class="btn skill">复制</button>
-<button id="btnSed" class="btn skill">沉淀蓄力</button>
-<button id="btnThunder" class="btn skill">引雷</button>
-<button id="btnDomain" class="btn skill">绝对领域</button>
-<button id="btnCannon" class="btn skill">天上来敌</button>
-<button id="btnSitKill" class="btn skill">坐杀</button>
-<button id="btnRps" class="btn skill">赌徒</button>
-<button id="btnCancel" class="btn cancel">取消技能</button>
-<button id="btnBack" class="btn back">返回主菜单</button>
-</div></div></div>
 
-<div id="modeModal" class="modal show"><div class="modal-box" style="min-width:400px">
+<!-- ===== 开发者管理面板 ===== -->
+<div id="adminPanel" style="display:none;">
+    <h2 style="text-align:center;color:#333;">🔧 账号管理</h2>
+    <p style="text-align:center;color:#666;margin-bottom:15px;">开发者模式 — 管理所有注册账号</p>
+    <div id="adminUserList"></div>
+    <p style="text-align:center;color:#999;font-size:12px;margin-top:15px;">共 <span id="adminTotalCount">0</span> 个账号</p>
+</div>
+
+<!-- ===== 游戏内容（普通用户） ===== -->
+<div id="gameContent">
+    <button id="btnStartGame" class="btn mode" style="display:none; width:200px; margin:10px auto; background:#2ecc71;">开始游戏</button>
+    <div class="challenge-bar" id="challengeBar">
+        <div><b>困难模式</b> · 难度 <span id="diffText">5</span></div>
+        <div class="progress-dots"><div class="dot" id="dot1">1</div><div class="dot" id="dot2">2</div><div class="dot" id="dot3">3</div></div>
+        <div class="buff-list" id="buffList"></div>
+    </div>
+    <div id="status" class="status-black">请先登录</div>
+    <div class="player-stats">
+        <div id="bs" class="stat black"><h3>黑方（先手）</h3><p>次数：<span id="bc">-</span></p><div class="skill-desc" id="bd">未选择技能</div></div>
+        <div id="ws" class="stat white"><h3>白方（后手）</h3><p>次数：<span id="wc">-</span></p><div class="skill-desc" id="wd">未选择技能</div></div>
+    </div>
+    <div class="main">
+        <div id="board" class="board"></div>
+        <div class="skills">
+            <h3>技能面板</h3>
+            <button id="btnBlast" class="btn skill">爆破专家</button>
+            <button id="btnCopy" class="btn skill">复制</button>
+            <button id="btnSed" class="btn skill">沉淀蓄力</button>
+            <button id="btnThunder" class="btn skill">引雷</button>
+            <button id="btnDomain" class="btn skill">绝对领域</button>
+            <button id="btnCannon" class="btn skill">天上来敌</button>
+            <button id="btnSitKill" class="btn skill">坐杀</button>
+            <button id="btnRps" class="btn skill">赌徒</button>
+            <button id="btnCancel" class="btn cancel">取消技能</button>
+            <button id="btnBack" class="btn back">返回主菜单</button>
+        </div>
+    </div>
+</div>
+</div>
+
+<!-- ===== 模态框（保持不变） ===== -->
+<!-- 模式选择 -->
+<div id="modeModal" class="modal"><div class="modal-box" style="min-width:400px">
 <h3>选择游戏模式</h3>
 <div class="mode-list">
 <button class="btn mode" data-mode="local">本地双人对战</button>
@@ -51,6 +68,7 @@
 <div id="joinArea" style="display:none"><input class="input" id="joinInput" placeholder="请输入对方房间号"><button class="btn mode" id="joinBtn">加入房间</button></div>
 </div></div>
 
+<!-- 闯关难度选择 -->
 <div id="diffModal" class="modal"><div class="modal-box" style="min-width:520px">
 <h3>选择闯关难度</h3>
 <p style="color:#666;font-size:13px">每个难度连续挑战3局，难度逐局提升，胜利可获得增益奖励</p>
@@ -62,18 +80,21 @@
 </div>
 </div></div>
 
+<!-- 奖励选择 -->
 <div id="rewardModal" class="modal"><div class="modal-box" style="min-width:520px">
 <h3 class="result-title win">本局胜利！</h3>
 <p>选择一项增益奖励，继续下一局挑战</p>
 <div class="reward-grid" id="rewardGrid"></div>
 </div></div>
 
+<!-- 结果展示 -->
 <div id="resultModal" class="modal"><div class="modal-box">
 <div class="result-title" id="resultTitle">胜利</div>
 <div class="result-info" id="resultInfo"></div>
 <div class="btn-group" id="resultBtns"></div>
 </div></div>
 
+<!-- 技能选择 -->
 <div id="skillModal" class="modal"><div class="modal-box" style="min-width:560px">
 <h3 id="skillTip">选择你的技能</h3>
 <div class="skill-list">
@@ -88,6 +109,7 @@
 <div class="skill-card" data-skill="redSpider"><h4>红蜘蛛</h4><p>开局自动召唤，自带3个技能，全程自动下棋自动放技能</p><p class="num">全程自动 | 无法手动操作 | 中等强度</p></div>
 </div></div></div>
 
+<!-- 转盘 -->
 <div id="wheelModal" class="modal"><div class="modal-box">
 <h3>赌徒转盘</h3>
 <p style="color:#666;font-size:13px;margin-bottom:15px">转动后自动生效，获得落子机会需手动落子</p>
@@ -104,7 +126,8 @@
 </div>
 <button id="spinBtn">开始转动</button>
 </div></div>
-    <!-- 登录注册弹窗 -->
+
+<!-- 登录注册 -->
 <div class="modal" id="loginModal">
     <div class="modal-box">
         <h3>账号登录</h3>
@@ -128,11 +151,17 @@
     </div>
 </div>
 
-<!-- 好友侧边栏 -->
+<!-- ===== 好友侧边栏（新增消息入口） ===== -->
 <div class="friend-panel">
     <div class="friend-header">
         <span>好友列表</span>
-        <button class="btn-add" id="btnAddFriend">+ 添加</button>
+        <div style="display:flex; gap:6px; align-items:center;">
+            <button class="btn-add" id="btnMessage" style="background:#f39c12; color:#fff; border:none; border-radius:4px; padding:4px 10px; font-size:12px; cursor:pointer; position:relative;">
+                📩 消息
+                <span id="msgBadge" style="display:none; background:#e74c3c; color:#fff; border-radius:50%; padding:1px 6px; font-size:11px; margin-left:4px;">0</span>
+            </button>
+            <button class="btn-add" id="btnAddFriend">+ 添加</button>
+        </div>
     </div>
     <div class="friend-list" id="friendList"></div>
     <div class="user-info">
@@ -141,7 +170,16 @@
     </div>
 </div>
 
-<!-- 聊天窗口 -->
+<!-- 消息面板 -->
+<div class="modal" id="messageModal">
+    <div class="modal-box" style="min-width:360px; max-height:70vh; overflow-y:auto; position:relative;">
+        <button id="closeMessageModal" style="position:absolute; top:10px; right:15px; background:none; border:none; font-size:24px; cursor:pointer; color:#999;">&times;</button>
+        <h3>📩 消息中心</h3>
+        <div id="messageList" style="margin-top:12px;"></div>
+    </div>
+</div>
+
+<!-- 聊天窗口（保持不变） -->
 <div class="chat-window" id="chatWindow" style="display:none">
     <div class="chat-header">
         <span id="chatTargetName">好友</span>
@@ -154,7 +192,7 @@
     </div>
 </div>
 
-<!-- 添加好友弹窗 -->
+<!-- 添加好友弹窗（保持不变） -->
 <div class="modal" id="addFriendModal">
     <div class="modal-box" style="min-width:280px">
         <h3>添加好友</h3>
@@ -163,14 +201,29 @@
         <p id="addFriendTip" style="color:#e74c3c;font-size:13px"></p>
         <div class="btn-group">
             <button class="btn cancel" id="cancelAddFriend">取消</button>
-            <button class="btn mode" id="confirmAddFriend">添加</button>
+            <button class="btn mode" id="confirmAddFriend">发送申请</button>
         </div>
     </div>
 </div>
-    <script src="js/config.js"></script>
-    <script src="js/utils.js"></script>
-    <script src="js/account.js"></script>
-    <script src="js/chat.js"></script>
-    <script src="js/game.js"></script>
+
+<!-- 修改账号弹窗（开发者用） -->
+<div class="modal" id="editUserModal">
+    <div class="modal-box" style="min-width:300px">
+        <h3 id="editUserTitle">修改账号</h3>
+        <input class="input" id="editUsername" placeholder="新用户名（留空不修改）">
+        <input class="input" id="editPassword" type="password" placeholder="新密码（留空不修改）">
+        <p id="editUserTip" style="color:#e74c3c;font-size:13px;margin-top:8px"></p>
+        <div class="btn-group">
+            <button class="btn cancel" id="cancelEditUser">取消</button>
+            <button class="btn mode" id="confirmEditUser">保存修改</button>
+        </div>
+    </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/account.js"></script>
+<script src="js/chat.js"></script>
+<script src="js/game.js"></script>
 </body>
 </html>

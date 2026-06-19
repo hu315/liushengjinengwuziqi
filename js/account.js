@@ -2,94 +2,101 @@
 const Account = {
     currentUser: null,
 
-    init(){
-        // 检查登录状态
+    DEV_USER: { username: "LIU", userId: "000001", password: btoa("Lpx101146"), isDev: true },
+
+    init() {
         const saved = localStorage.getItem("currentUser");
-        if(saved){
+        if (saved) {
             this.currentUser = JSON.parse(saved);
+            if (this.currentUser.username === this.DEV_USER.username) {
+                this.currentUser.isDev = true;
+            }
             return true;
         }
         return false;
     },
 
-    // 注册
-    register(username, pwd){
-        if(!username || !pwd) return {ok:false, msg:"用户名和密码不能为空"};
-        if(username.length < 2) return {ok:false, msg:"用户名至少2位"};
-        if(pwd.length < 4) return {ok:false, msg:"密码至少4位"};
+    register(username, pwd) {
+        if (!username || !pwd) return { ok: false, msg: "用户名和密码不能为空" };
+        if (username.length < 2) return { ok: false, msg: "用户名至少2位" };
+        if (pwd.length < 4) return { ok: false, msg: "密码至少4位" };
+        if (username === this.DEV_USER.username) return { ok: false, msg: "该用户名已被占用" };
 
         let userList = JSON.parse(localStorage.getItem("userList") || "[]");
-        if(userList.find(u => u.username === username)){
-            return {ok:false, msg:"用户名已存在"};
+        if (userList.find(u => u.username === username)) {
+            return { ok: false, msg: "用户名已存在" };
         }
 
-        // 生成6位唯一短ID
         let userId;
         do {
             userId = Math.floor(100000 + Math.random() * 900000).toString();
-        } while(userList.find(u => u.userId === userId));
+        } while (userList.find(u => u.userId === userId));
 
-        const user = {username, userId, password: btoa(pwd)};
+        const user = { username, userId, password: btoa(pwd) };
         userList.push(user);
         localStorage.setItem("userList", JSON.stringify(userList));
-        
-        // 自动登录
+
         this.currentUser = user;
         localStorage.setItem("currentUser", JSON.stringify(user));
-        return {ok:true, user};
+        return { ok: true, user };
     },
 
-    // 登录
-    login(username, pwd){
+    login(username, pwd) {
+        if (username === this.DEV_USER.username && btoa(pwd) === this.DEV_USER.password) {
+            const devUser = { ...this.DEV_USER, isDev: true };
+            this.currentUser = devUser;
+            localStorage.setItem("currentUser", JSON.stringify(devUser));
+            return { ok: true, user: devUser };
+        }
+
         const userList = JSON.parse(localStorage.getItem("userList") || "[]");
         const user = userList.find(u => u.username === username && u.password === btoa(pwd));
-        if(!user) return {ok:false, msg:"用户名或密码错误"};
-        
+        if (!user) return { ok: false, msg: "用户名或密码错误" };
+
         this.currentUser = user;
         localStorage.setItem("currentUser", JSON.stringify(user));
-        return {ok:true, user};
+        return { ok: true, user };
     },
 
-    // 登出
-    logout(){
+    logout() {
         this.currentUser = null;
         localStorage.removeItem("currentUser");
         location.reload();
     },
 
-    // 好友管理
-    getFriends(){
-        if(!this.currentUser) return [];
+    isDeveloper() {
+        return this.currentUser && this.currentUser.username === this.DEV_USER.username;
+    },
+
+    // ===== 好友管理 =====
+    getFriends() {
+        if (!this.currentUser) return [];
         const key = `friends_${this.currentUser.userId}`;
         return JSON.parse(localStorage.getItem(key) || "[]");
     },
 
-    addFriend(userId, remark){
-        if(!/^\d{6}$/.test(userId)) return {ok:false, msg:"请输入正确的6位ID"};
-        if(userId === this.currentUser.userId) return {ok:false, msg:"不能添加自己"};
-        
+    _addFriendDirect(userId, remark) {
         const friends = this.getFriends();
-        if(friends.find(f => f.userId === userId)){
-            return {ok:false, msg:"该好友已存在"};
-        }
-
-        friends.push({userId, remark: remark || `玩家${userId}`});
+        if (friends.find(f => f.userId === userId)) return false;
+        friends.push({ userId, remark: remark || `玩家${userId}` });
         const key = `friends_${this.currentUser.userId}`;
         localStorage.setItem(key, JSON.stringify(friends));
-        return {ok:true};
+        return true;
     },
 
-    removeFriend(userId){
+    removeFriend(userId) {
         let friends = this.getFriends().filter(f => f.userId !== userId);
         const key = `friends_${this.currentUser.userId}`;
         localStorage.setItem(key, JSON.stringify(friends));
+        this.renderFriendList();
     },
 
-    renderFriendList(){
+    renderFriendList() {
         const list = this.getFriends();
-        const container = $("friendList");
+        const container = document.getElementById("friendList");
+        if (!container) return;
         container.innerHTML = "";
-        if(list.length === 0){
+        if (list.length === 0) {
             container.innerHTML = '<p style="text-align:center;color:#999;font-size:12px;padding:20px 0">暂无好友</p>';
             return;
         }
@@ -97,21 +104,391 @@ const Account = {
             const item = document.createElement("div");
             item.className = "friend-item";
             item.innerHTML = `
-                <div>
+                <div style="flex:1; min-width:0;">
                     <div class="name">${f.remark}</div>
                     <div class="id">ID: ${f.userId}</div>
                 </div>
-                <button class="invite-btn" data-id="${f.userId}">对战</button>
+                <div style="display:flex; gap:4px; flex-shrink:0;">
+                    <button class="chat-btn" data-id="${f.userId}" style="background:#2ecc71;color:#fff;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px;">💬 聊天</button>
+                    <button class="invite-btn" data-id="${f.userId}" style="background:#3498db;color:#fff;border:none;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px;">⚔️ 对战</button>
+                    <button class="del-btn" data-id="${f.userId}" style="background:#e74c3c;color:#fff;border:none;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:11px;">×</button>
+                </div>
             `;
-            item.querySelector(".name").onclick = () => Chat.open(f.userId, f.remark);
+            item.querySelector(".chat-btn").onclick = (e) => {
+                e.stopPropagation();
+                Chat.open(f.userId, f.remark);
+            };
             item.querySelector(".invite-btn").onclick = (e) => {
                 e.stopPropagation();
-                // 邀请对战
-                window.mode = "online";
-                window.host = 1;
-                initPeerConnection(f.userId, true);
+                Account.sendInvite(f.userId);
+            };
+            item.querySelector(".del-btn").onclick = (e) => {
+                e.stopPropagation();
+                if (confirm(`确定删除好友“${f.remark}”吗？`)) {
+                    this.removeFriend(f.userId);
+                }
             };
             container.appendChild(item);
         });
+    },
+
+    // ===== 消息系统 =====
+    getMessages() {
+        if (!this.currentUser) return [];
+        const key = `msgs_${this.currentUser.userId}`;
+        return JSON.parse(localStorage.getItem(key) || "[]");
+    },
+
+    saveMessages(msgs) {
+        if (!this.currentUser) return;
+        const key = `msgs_${this.currentUser.userId}`;
+        localStorage.setItem(key, JSON.stringify(msgs));
+    },
+
+    addMessage(msg) {
+        const msgs = this.getMessages();
+        msgs.push({ ...msg, time: Date.now(), read: false });
+        this.saveMessages(msgs);
+        this.updateMessageBadge();
+    },
+
+    markMessageRead(index) {
+        const msgs = this.getMessages();
+        if (msgs[index]) msgs[index].read = true;
+        this.saveMessages(msgs);
+        this.updateMessageBadge();
+    },
+
+    getUnreadCount() {
+        return this.getMessages().filter(m => !m.read).length;
+    },
+
+    updateMessageBadge() {
+        const badge = document.getElementById("msgBadge");
+        const count = this.getUnreadCount();
+        if (count > 0) {
+            badge.style.display = "inline";
+            badge.textContent = count;
+        } else {
+            badge.style.display = "none";
+        }
+    },
+
+    // ===== 发送好友申请 =====
+    sendFriendRequest(targetUserId, remark) {
+        if (!this.currentUser) return { ok: false, msg: "请先登录" };
+        if (targetUserId === this.currentUser.userId) return { ok: false, msg: "不能添加自己" };
+        if (this.getFriends().find(f => f.userId === targetUserId)) {
+            return { ok: false, msg: "已是好友" };
+        }
+        const msgs = this.getMessages();
+        const existing = msgs.find(m => m.type === "friendRequest" && m.from === targetUserId && !m.reply);
+        if (existing) return { ok: false, msg: "已发送过申请，请等待对方回复" };
+
+        this.sendDataToUser(targetUserId, {
+            type: "friendRequest",
+            from: this.currentUser.userId,
+            fromName: this.currentUser.username,
+            remark: remark || this.currentUser.username,
+            time: Date.now()
+        }, (success) => {
+            if (success) {
+                this.addMessage({
+                    type: "friendRequestSent",
+                    content: `已向 ${targetUserId} 发送好友申请`,
+                });
+                alert("好友申请已发送，等待对方确认");
+            } else {
+                alert("对方不在线，无法发送申请");
+            }
+        });
+        return { ok: true };
+    },
+
+    // ===== 发送对战邀请 =====
+    sendInvite(targetUserId) {
+        if (!this.currentUser) return;
+        if (window.isInGame) {
+            alert("您已在游戏中，无法发送邀请");
+            return;
+        }
+        this.sendDataToUser(targetUserId, {
+            type: "invite",
+            from: this.currentUser.userId,
+            fromName: this.currentUser.username,
+            time: Date.now()
+        }, (success) => {
+            if (!success) {
+                alert("对方不在线或无法连接，请稍后再试");
+            }
+        });
+    },
+
+    // ===== 底层数据发送（使用消息专用 peer） =====
+    sendDataToUser(targetUserId, data, callback) {
+        // 确保消息 peer 存在
+        if (!window.peer || window.peer.destroyed) {
+            window.peer = new Peer(Account.currentUser.userId, {
+                host: '0.peerjs.com',
+                port: 443,
+                path: '/',
+                secure: true,
+                debug: 0,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun.qq.com:3478' },
+                        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' }
+                    ]
+                }
+            });
+            window.peer.on("connection", (conn) => {
+                conn.on("data", (d) => {
+                    if (d.type === "game") return;
+                    handlePeerData(d);
+                });
+            });
+            window.peer.on("error", (err) => console.error("消息 Peer 错误:", err));
+        }
+
+        const conn = window.peer.connect(targetUserId, { reliable: true });
+        let connected = false;
+        const timeout = setTimeout(() => {
+            if (!connected) {
+                conn.close();
+                if (callback) callback(false);
+            }
+        }, 5000);
+
+        conn.on("open", () => {
+            connected = true;
+            clearTimeout(timeout);
+            conn.send(data);
+            // 监听回复（只处理一次）
+            conn.on("data", (reply) => {
+                if (reply.type === "friendRequestReply") {
+                    Account.handleFriendRequestReply(reply);
+                } else if (reply.type === "inviteReply") {
+                    Account.handleInviteReply(reply);
+                }
+                // 收到回复后关闭连接
+                setTimeout(() => { if (conn.open) conn.close(); }, 300);
+            });
+            if (callback) callback(true);
+        });
+        conn.on("error", (err) => {
+            clearTimeout(timeout);
+            if (callback) callback(false);
+        });
+    },
+
+    // ===== 处理好友申请回复 =====
+    handleFriendRequestReply(reply) {
+        const fromId = reply.from;
+        if (reply.accepted) {
+            this._addFriendDirect(fromId, reply.remark || `玩家${fromId}`);
+            const msgs = this.getMessages();
+            const idx = msgs.findIndex(m => m.type === "friendRequest" && m.from === fromId && !m.reply);
+            if (idx !== -1) {
+                msgs[idx].reply = true;
+                msgs[idx].accepted = true;
+                this.saveMessages(msgs);
+            }
+            this.addMessage({
+                type: "system",
+                content: `已与 ${reply.remark || fromId} 成为好友`
+            });
+            this.renderFriendList();
+            this.updateMessageBadge();
+            alert(`已与 ${reply.remark || fromId} 成为好友`);
+        } else {
+            const msgs = this.getMessages();
+            const idx = msgs.findIndex(m => m.type === "friendRequest" && m.from === fromId && !m.reply);
+            if (idx !== -1) {
+                msgs[idx].reply = true;
+                msgs[idx].accepted = false;
+                this.saveMessages(msgs);
+            }
+            this.updateMessageBadge();
+            alert(`对方拒绝了您的好友申请`);
+        }
+    },
+
+    // ===== 处理对战邀请回复（修复：销毁游戏 peer，保留消息 peer） =====
+    handleInviteReply(reply) {
+        const fromId = reply.from;
+        if (reply.accepted) {
+            if (window.isInGame) {
+                alert("您已在游戏中，无法开始新对局");
+                return;
+            }
+            // 销毁旧的游戏 peer（如果有）
+            if (window.gamePeer) {
+                try { window.gamePeer.destroy(); } catch(e) {}
+                window.gamePeer = null;
+            }
+            if (window.conn) {
+                try { window.conn.close(); } catch(e) {}
+                window.conn = null;
+            }
+            window.mode = "online";
+            window.host = 1;
+            initPeerConnection(fromId, true);
+        } else {
+            const reason = reply.reason || "";
+            alert(`对方拒绝了您的对战邀请${reason ? "：" + reason : ""}`);
+        }
+    },
+
+    // ===== 开发者账号管理 =====
+    getAllUsers() {
+        return JSON.parse(localStorage.getItem("userList") || "[]");
+    },
+
+    deleteUser(username) {
+        if (username === this.DEV_USER.username) return { ok: false, msg: "不能删除开发者账号" };
+        let list = this.getAllUsers().filter(u => u.username !== username);
+        localStorage.setItem("userList", JSON.stringify(list));
+        return { ok: true };
+    },
+
+    updateUser(username, newData) {
+        if (username === this.DEV_USER.username) return { ok: false, msg: "不能修改开发者账号" };
+        let list = this.getAllUsers();
+        const idx = list.findIndex(u => u.username === username);
+        if (idx === -1) return { ok: false, msg: "用户不存在" };
+
+        if (newData.username && newData.username !== username) {
+            if (list.find(u => u.username === newData.username)) {
+                return { ok: false, msg: "用户名已被占用" };
+            }
+        }
+
+        list[idx] = { ...list[idx], ...newData };
+        localStorage.setItem("userList", JSON.stringify(list));
+
+        if (this.currentUser && this.currentUser.username === username) {
+            this.currentUser = { ...this.currentUser, ...newData };
+            localStorage.setItem("currentUser", JSON.stringify(this.currentUser));
+        }
+        return { ok: true };
+    },
+
+    renderAdminPanel() {
+        const container = document.getElementById("adminUserList");
+        if (!container) return;
+        const users = this.getAllUsers();
+        document.getElementById("adminTotalCount").textContent = users.length;
+
+        if (users.length === 0) {
+            container.innerHTML = '<p style="text-align:center;color:#999;padding:20px;">暂无注册账号</p>';
+            return;
+        }
+
+        let html = `
+            <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+                <thead>
+                    <tr style="background:#2c3e50;color:#fff;">
+                        <th style="padding:10px 12px;text-align:left;">序号</th>
+                        <th style="padding:10px 12px;text-align:left;">用户名</th>
+                        <th style="padding:10px 12px;text-align:left;">用户ID</th>
+                        <th style="padding:10px 12px;text-align:left;">密码</th>
+                        <th style="padding:10px 12px;text-align:center;">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        users.forEach((u, i) => {
+            const pwdDisplay = u.password ? u.password.substring(0, 6) + '***' : '***';
+            html += `
+                <tr style="border-bottom:1px solid #eee;">
+                    <td style="padding:10px 12px;">${i + 1}</td>
+                    <td style="padding:10px 12px;font-weight:500;">${u.username}</td>
+                    <td style="padding:10px 12px;color:#666;">${u.userId}</td>
+                    <td style="padding:10px 12px;color:#999;font-family:monospace;">${pwdDisplay}</td>
+                    <td style="padding:10px 12px;text-align:center;">
+                        <button class="admin-btn edit-btn" data-username="${u.username}" style="background:#3498db;color:#fff;border:none;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:12px;margin-right:4px;">修改</button>
+                        <button class="admin-btn delete-btn" data-username="${u.username}" style="background:#e74c3c;color:#fff;border:none;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:12px;">删除</button>
+                    </td>
+                </tr>
+            `;
+        });
+
+        html += `</tbody></table>`;
+        container.innerHTML = html;
+
+        container.querySelectorAll(".delete-btn").forEach(btn => {
+            btn.onclick = () => {
+                const username = btn.dataset.username;
+                if (confirm(`确定要删除账号 "${username}" 吗？此操作不可恢复！`)) {
+                    const result = this.deleteUser(username);
+                    if (result.ok) {
+                        alert("删除成功");
+                        this.renderAdminPanel();
+                    } else {
+                        alert(result.msg);
+                    }
+                }
+            };
+        });
+
+        container.querySelectorAll(".edit-btn").forEach(btn => {
+            btn.onclick = () => {
+                const username = btn.dataset.username;
+                showEditUserModal(username);
+            };
+        });
     }
 };
+
+// ===== 修改账号弹窗 =====
+function showEditUserModal(username) {
+    document.getElementById("editUserTitle").textContent = `修改账号：${username}`;
+    document.getElementById("editUsername").value = "";
+    document.getElementById("editPassword").value = "";
+    document.getElementById("editUserTip").textContent = "";
+    document.getElementById("editUserModal").classList.add("show");
+
+    const confirmBtn = document.getElementById("confirmEditUser");
+    const cancelBtn = document.getElementById("cancelEditUser");
+
+    const newConfirm = confirmBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
+    const newCancel = cancelBtn.cloneNode(true);
+    cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+
+    newCancel.onclick = () => {
+        document.getElementById("editUserModal").classList.remove("show");
+    };
+
+    newConfirm.onclick = () => {
+        const newUsername = document.getElementById("editUsername").value.trim();
+        const newPwd = document.getElementById("editPassword").value;
+        const tip = document.getElementById("editUserTip");
+
+        if (!newUsername && !newPwd) {
+            tip.textContent = "请至少填写一项修改内容";
+            return;
+        }
+
+        const updateData = {};
+        if (newUsername) updateData.username = newUsername;
+        if (newPwd) {
+            if (newPwd.length < 4) {
+                tip.textContent = "密码至少4位";
+                return;
+            }
+            updateData.password = btoa(newPwd);
+        }
+
+        const result = Account.updateUser(username, updateData);
+        if (result.ok) {
+            alert("修改成功");
+            document.getElementById("editUserModal").classList.remove("show");
+            Account.renderAdminPanel();
+        } else {
+            tip.textContent = result.msg;
+        }
+    };
+}

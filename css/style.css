@@ -129,3 +129,192 @@ h1{text-align:center;color:#333;margin-bottom:10px;animation:ti .9s cubic-bezier
 .conn-status.connecting{background:#f39c12}
 .conn-status.connected{background:#27ae60}
 .conn-status.failed{background:#e74c3c}
+/* 在现有 style.css 末尾追加以下内容 */
+
+/* ===== 开发者管理面板样式 ===== */
+#adminPanel {
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px 0;
+}
+
+#adminPanel h2 {
+    text-align: center;
+    color: #2c3e50;
+    margin-bottom: 8px;
+}
+
+#adminPanel .admin-table-wrap {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    overflow: hidden;
+    margin-top: 15px;
+}
+
+#adminPanel table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+#adminPanel table th {
+    background: #2c3e50;
+    color: #fff;
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+}
+
+#adminPanel table td {
+    padding: 10px 16px;
+    border-bottom: 1px solid #f0f0f0;
+    vertical-align: middle;
+}
+
+#adminPanel table tr:hover td {
+    background: #f8f9fa;
+}
+
+#adminPanel table tr:last-child td {
+    border-bottom: none;
+}
+
+.admin-btn {
+    padding: 4px 14px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.2s;
+    display: inline-block;
+}
+
+.admin-btn.edit-btn {
+    background: #3498db;
+    color: #fff;
+}
+.admin-btn.edit-btn:hover {
+    background: #2980b9;
+}
+
+.admin-btn.delete-btn {
+    background: #e74c3c;
+    color: #fff;
+}
+.admin-btn.delete-btn:hover {
+    background: #c0392b;
+}
+
+#adminPanel .admin-empty {
+    text-align: center;
+    color: #999;
+    padding: 30px 0;
+    font-size: 14px;
+}
+
+#adminPanel .admin-footer {
+    text-align: center;
+    color: #bbb;
+    font-size: 12px;
+    margin-top: 15px;
+}
+
+/* ===== 修改账号弹窗 ===== */
+#editUserModal .modal-box {
+    min-width: 320px;
+}
+
+#editUserModal .input {
+    width: 100%;
+    padding: 10px 12px;
+    margin: 6px 0 12px 0;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+
+#editUserModal .input:focus {
+    border-color: #3498db;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(52,152,219,0.15);
+}
+
+#editUserModal .btn-group {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 15px;
+}
+
+/* ===== 开发者模式状态栏 ===== */
+.status-dev {
+    background: #2c3e50 !important;
+    color: #f1c40f !important;
+    border: 1px solid #f1c40f !important;
+}
+/* 开发者管理面板样式 */
+#adminPanel {
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px 0;
+}
+
+#adminPanel table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+#adminPanel table th {
+    background: #2c3e50;
+    color: #fff;
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+}
+
+#adminPanel table td {
+    padding: 10px 16px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+#adminPanel table tr:hover td {
+    background: #f8f9fa;
+}
+
+.admin-btn {
+    padding: 4px 14px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.2s;
+}
+
+.admin-btn.edit-btn { background: #3498db; color: #fff; }
+.admin-btn.edit-btn:hover { background: #2980b9; }
+.admin-btn.delete-btn { background: #e74c3c; color: #fff; }
+.admin-btn.delete-btn:hover { background: #c0392b; }
+
+#editUserModal .modal-box {
+    min-width: 320px;
+}
+#editUserModal .input {
+    width: 100%;
+    padding: 10px 12px;
+    margin: 6px 0 12px 0;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+#editUserModal .btn-group {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 15px;
+}
