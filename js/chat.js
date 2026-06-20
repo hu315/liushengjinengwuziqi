@@ -150,7 +150,7 @@ function handlePeerData(data, conn) {
             "好友申请",
             `用户 ${data.fromName} (ID: ${data.from}) 申请添加您为好友，是否同意？`,
             () => { // 同意
-                // 接受方先添加发起方
+                // 接受方先添加发起方（本地好友列表）
                 Account._addFriendDirect(data.from, data.remark || `玩家${data.from}`);
                 // 发送回复（发起方收到后会添加接受方）
                 const reply = {
@@ -220,9 +220,11 @@ function handlePeerData(data, conn) {
                     window.conn = null;
                 }
                 window.mode = "online";
-                window.host = 0;  // 接受方为客户端
+                window.host = 0;
                 if (typeof initPeerConnection === "function") {
                     initPeerConnection(data.from, false);
+                } else {
+                    alert("游戏组件未加载，请刷新页面");
                 }
                 setStatus("正在连接...");
             },
@@ -373,7 +375,7 @@ function afterLogin() {
 
         Account.addMessage({
             type: "system",
-            content: "🎉 欢迎使用技能五子棋 v2.0！新增消息中心、好友申请、对战邀请功能，优化联机体验。"
+            content: "🎉 欢迎使用技能五子棋 v2.0！"
         });
         Account.updateMessageBadge();
     }
@@ -478,6 +480,7 @@ function renderMessageModal() {
                 Account.updateMessageBadge();
                 renderMessageModal();
                 setStatus(`已添加 ${msg.fromName || msg.from} 为好友`);
+                alert(`已与 ${msg.fromName || msg.from} 成为好友`);
             } else if (action === "rejectFriend") {
                 const reply = {
                     type: "friendRequestReply",

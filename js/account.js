@@ -206,7 +206,7 @@ const Account = {
         return { ok: true };
     },
 
-    // ===== 发送对战邀请（与房间号联机统一逻辑） =====
+    // ===== 发送对战邀请 =====
     sendInvite(targetUserId) {
         if (!this.currentUser) return;
         if (window.isInGame) {
@@ -221,7 +221,6 @@ const Account = {
         // 先成为房主（开始监听）
         window.mode = "online";
         window.host = 1;
-        // 调用 game.js 中的 initPeerConnection，传入 null 表示房主
         if (typeof initPeerConnection === "function") {
             initPeerConnection(null, true);
         } else {
@@ -245,7 +244,7 @@ const Account = {
         });
     },
 
-    // ===== 底层数据发送（使用全局 peer，不再创建） =====
+    // ===== 底层数据发送（使用全局 peer） =====
     sendDataToUser(targetUserId, data, callback) {
         if (!window.peer || window.peer.destroyed) {
             console.error("Peer 未初始化，请重新登录");
@@ -285,7 +284,7 @@ const Account = {
     handleFriendRequestReply(reply) {
         const fromId = reply.from;
         if (reply.accepted) {
-            // 双方都添加对方（本地存储）
+            // 发起方添加对方（接收方已在同意时添加了发起方，但这里再次确保）
             this._addFriendDirect(fromId, reply.remark || `玩家${fromId}`);
             const msgs = this.getMessages();
             const idx = msgs.findIndex(m => m.type === "friendRequest" && m.from === fromId && !m.reply);
