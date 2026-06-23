@@ -87,8 +87,9 @@ function sendChat(message) {
         addChatMessage("系统", "连接未建立，无法发送消息", "system");
         return;
     }
-    sendGame("chat", { message, timestamp: Date.now() });
-    addChatMessage("我", message, "mine");
+    const senderName = Account.currentUser?.username || "我";
+    sendGame("chat", { message, timestamp: Date.now(), fromName: senderName });
+    addChatMessage(senderName, message, "mine");
 }
 
 function addChatMessage(sender, message, type) {
@@ -356,6 +357,8 @@ function bindAllEvents() {
         setStatus(window.wheelResult || `回合：${window.cur === window.B ? "黑" : "白"}`);
     };
     $("btnBack").onclick = () => {
+        // 标记用户已主动退出，防止重连
+        window._userQuit = true;
         cleanupConnection();
         $("challengeBar").style.display = "none";
         $("btnStartGame").style.display = "block";
@@ -421,6 +424,8 @@ function cleanupConnection() {
     window._connHandler = null;
     window._skillSelectedSent = false;
     window._reconnectAttempt = 0;
+    window._userQuit = false; // 重置用户退出标志，允许下次游戏
+    window.opponentAvatar = null; // 清理对手头像
     // 清理所有 autoPlay 定时器
     window._autoPlayTimers.forEach(timerId => clearTimeout(timerId));
     window._autoPlayTimers = [];
@@ -489,6 +494,11 @@ function updateBoardBackground() {
 }
 
 function selSkill() {
+    // 如果用户已主动退出，不显示技能选择框
+    if (window._userQuit) {
+        console.log("selSkill: 用户已退出，跳过");
+        return;
+    }
     // 检查是否应该显示技能选择框
     if (window.phase === "skillSelect") {
         console.log("selSkill: 已在技能选择阶段，跳过");
@@ -497,7 +507,7 @@ function selSkill() {
     // 如果不是有效模式，不显示技能选择
     const validModes = ["local", "ai", "online"];
     if (!validModes.includes(window.mode) && !window.challengeMode) {
-        console.log("selSkill: 无效模式，跳过");
+        console.log("selSkill: 无效模式(" + window.mode + ")，跳过");
         return;
     }
     // 在线模式下（非房主），必须有有效的连接
@@ -530,6 +540,8 @@ function ready() {
     updateStatusText();
     refBtn();
     upUI();
+    // 更新对战头像
+    updateBattleAvatars();
     if (window.D[window.cur].s === "redSpider") {
         const timerId = setTimeout(() => autoPlay(window.cur), 800);
         window._autoPlayTimers.push(timerId);
@@ -908,15 +920,266 @@ function openD(o, isC) {
 }
 function closeD() { window.dom.a=0; window.be.classList.remove("domain"); setStatus("领域消散"); refBtn(); }
 
+// ==================== 棋盘主题系统 ====================
+const BOARD_THEMES = {
+    cyber: {
+        id: "cyber",
+        name: "赛博朋克",
+        description: "霓虹灯光效果，科技感十足",
+        boardBg: "linear-gradient(135deg, #0a0a12 0%, #1a1a2e 50%, #0a0a12 100%)",
+        gridColor: "rgba(0, 240, 255, 0.15)",
+        blackStone: "radial-gradient(circle at 35% 35%, #ffffff 0%, #00f0ff 30%, #0066ff 60%, #003399 100%)",
+        whiteStone: "radial-gradient(circle at 35% 35%, #ffffff 0%, #f0f0f0 50%, #cccccc 100%)",
+        accentColor: "#00f0ff"
+    },
+    classic: {
+        id: "classic",
+        name: "古典木纹",
+        description: "传统木质棋盘风格",
+        boardBg: "linear-gradient(135deg, #d4a574 0%, #c4956a 30%, #a67c52 70%, #8b6914 100%)",
+        gridColor: "rgba(0, 0, 0, 0.4)",
+        blackStone: "radial-gradient(circle at 35% 35%, #4a4a4a 0%, #2a2a2a 50%, #1a1a1a 100%)",
+        whiteStone: "radial-gradient(circle at 35% 35%, #ffffff 0%, #f5f5f5 50%, #e0e0e0 100%)",
+        accentColor: "#8b6914"
+    },
+    forest: {
+        id: "forest",
+        name: "森林绿意",
+        description: "清新自然的绿色主题",
+        boardBg: "linear-gradient(135deg, #2d5a27 0%, #1e3d1a 50%, #0f240d 100%)",
+        gridColor: "rgba(255, 255, 255, 0.15)",
+        blackStone: "radial-gradient(circle at 35% 35%, #4a4a4a 0%, #1a1a1a 50%, #0a0a0a 100%)",
+        whiteStone: "radial-gradient(circle at 35% 35%, #f0f8e8 0%, #d8e4c8 50%, #b8c8a8 100%)",
+        accentColor: "#22c55e"
+    },
+    ocean: {
+        id: "ocean",
+        name: "深海蓝调",
+        description: "宁静深邃的海洋风格",
+        boardBg: "linear-gradient(135deg, #0c4a6e 0%, #072540 50%, #031520 100%)",
+        gridColor: "rgba(100, 200, 255, 0.2)",
+        blackStone: "radial-gradient(circle at 35% 35%, #1e3a5f 0%, #0d1f35 50%, #061020 100%)",
+        whiteStone: "radial-gradient(circle at 35% 35%, #a5d8ff 0%, #74c0fc 50%, #4dabf7 100%)",
+        accentColor: "#3b82f6"
+    },
+    sunset: {
+        id: "sunset",
+        name: "日落余晖",
+        description: "温暖的橙红色调",
+        boardBg: "linear-gradient(135deg, #7c2d12 0%, #9a3412 30%, #c2410c 70%, #ea580c 100%)",
+        gridColor: "rgba(255, 200, 150, 0.25)",
+        blackStone: "radial-gradient(circle at 35% 35%, #3a1a0a 0%, #2a1208 50%, #1a0a04 100%)",
+        whiteStone: "radial-gradient(circle at 35% 35%, #fef3c7 0%, #fde68a 50%, #fcd34d 100%)",
+        accentColor: "#f97316"
+    },
+    galaxy: {
+        id: "galaxy",
+        name: "银河星空",
+        description: "神秘的宇宙星空主题",
+        boardBg: "linear-gradient(135deg, #1a0a2e 0%, #16213e 30%, #0f3460 70%, #1a1a3e 100%)",
+        gridColor: "rgba(150, 100, 255, 0.2)",
+        blackStone: "radial-gradient(circle at 35% 35%, #4c1d95 0%, #3b0764 50%, #2d064e 100%)",
+        whiteStone: "radial-gradient(circle at 35% 35%, #e9d5ff 0%, #c4b5fd 50%, #a78bfa 100%)",
+        accentColor: "#8b5cf6"
+    }
+};
+
+function getCurrentTheme() {
+    const saved = localStorage.getItem("boardTheme") || "cyber";
+    return BOARD_THEMES[saved] || BOARD_THEMES.cyber;
+}
+
+function applyTheme(themeId) {
+    const theme = BOARD_THEMES[themeId];
+    if (!theme) return;
+    
+    const board = document.getElementById("board");
+    if (board) {
+        board.style.background = theme.boardBg;
+        // 更新CSS变量
+        document.documentElement.style.setProperty('--theme-board-bg', theme.boardBg);
+        document.documentElement.style.setProperty('--theme-grid-color', theme.gridColor);
+        document.documentElement.style.setProperty('--theme-black-stone', theme.blackStone);
+        document.documentElement.style.setProperty('--theme-white-stone', theme.whiteStone);
+        document.documentElement.style.setProperty('--theme-accent', theme.accentColor);
+    }
+    
+    localStorage.setItem("boardTheme", themeId);
+}
+
+function renderThemeList() {
+    const container = document.getElementById("themeList");
+    if (!container) return;
+    
+    const currentTheme = getCurrentTheme();
+    container.innerHTML = "";
+    
+    Object.values(BOARD_THEMES).forEach(theme => {
+        const item = document.createElement("div");
+        item.className = `theme-item ${theme.id === currentTheme.id ? 'selected' : ''}`;
+        item.innerHTML = `
+            <div class="theme-preview" style="background: ${theme.boardBg}; border-color: ${theme.accentColor};">
+                <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                    <div style="width: 10px; height: 10px; border-radius: 50%; background: ${theme.blackStone};"></div>
+                    <div style="width: 10px; height: 10px; border-radius: 50%; background: ${theme.whiteStone};"></div>
+                </div>
+            </div>
+            <div class="theme-info">
+                <div class="theme-name" style="color: ${theme.accentColor};">${theme.name}</div>
+                <div class="theme-desc">${theme.description}</div>
+            </div>
+        `;
+        item.onclick = () => {
+            applyTheme(theme.id);
+            container.querySelectorAll('.theme-item').forEach(i => i.classList.remove('selected'));
+            item.classList.add('selected');
+        };
+        container.appendChild(item);
+    });
+}
+
+function renderAvatarList() {
+    const container = document.getElementById("avatarList");
+    if (!container || !Account) return;
+    
+    const currentAvatarId = Account.currentUser?.avatarId || 1;
+    const isCustomAvatar = Account.currentUser?.customAvatar ? true : false;
+    container.innerHTML = "";
+    
+    Account.AVATARS.forEach(avatar => {
+        const item = document.createElement("div");
+        item.className = `avatar-item ${!isCustomAvatar && avatar.id === currentAvatarId ? 'selected' : ''}`;
+        item.innerHTML = `${avatar.emoji}`;
+        item.title = avatar.name;
+        item.onclick = () => {
+            const result = Account.changeAvatar(avatar.id);
+            if (result.ok) {
+                updateRankDisplay();
+                // 更新设置面板中的头像显示
+                if (typeof updateSettingsPanel === 'function') {
+                    updateSettingsPanel();
+                }
+                container.querySelectorAll('.avatar-item').forEach(i => i.classList.remove('selected'));
+                item.classList.add('selected');
+            }
+        };
+        container.appendChild(item);
+    });
+}
+
 // ==================== 辅助 ====================
-function addFx(ps, fc, dur) { ps.forEach(p => { const c=window.be.children[p.y*window.S+p.x]; c.classList.add(fc); setTimeout(()=>c.classList.remove(fc), dur); }); }
+function updateBattleAvatars() {
+    // 防御性检查
+    if (!Account || !Account.currentUser) {
+        console.log("updateBattleAvatars: Account or currentUser is null");
+        return;
+    }
+    
+    // 获取当前用户头像 - 使用正确的实例方法调用
+    let myAvatar;
+    if (typeof Account.getCurrentAvatar === 'function') {
+        myAvatar = Account.getCurrentAvatar();
+    } else if (typeof Account.getAvatar === 'function') {
+        myAvatar = Account.getAvatar(Account.currentUser.avatarId);
+    } else {
+        myAvatar = { id: 1, emoji: '👤', custom: null, name: "默认头像" };
+    }
+    
+    const myAvatarHtml = myAvatar.custom 
+        ? `<img src="${myAvatar.custom}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`
+        : (myAvatar.emoji || '👤');
+    
+    // 确定我方和敌方
+    let mySide, enemySide;
+    if (window.mode === "local") {
+        // 本地双人对战，黑方和白方都是玩家
+        mySide = window.B; // 默认黑方为玩家
+        enemySide = window.W;
+    } else if (window.mode === "ai") {
+        // 人机对战，玩家是黑方
+        mySide = window.B;
+        enemySide = window.W;
+    } else if (window.mode === "online") {
+        // 联机对战，根据是否为房主确定
+        mySide = window.host ? window.B : window.W;
+        enemySide = window.host ? window.W : window.B;
+    }
+    
+    // 更新我方头像
+    const myAvatarElement = mySide === window.B ? document.getElementById("blackAvatar") : document.getElementById("whiteAvatar");
+    if (myAvatarElement) {
+        myAvatarElement.innerHTML = myAvatarHtml;
+    } else {
+        console.log("updateBattleAvatars: 我方头像元素不存在, mySide:", mySide);
+    }
+    
+    // 更新敌方头像
+    let enemyAvatarHtml = '👤';
+    if (window.mode === "online") {
+        if (window.opponentAvatar) {
+            // 联机模式下使用收到的对手头像
+            const enemyAvatar = window.opponentAvatar;
+            enemyAvatarHtml = enemyAvatar.custom 
+                ? `<img src="${enemyAvatar.custom}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`
+                : (enemyAvatar.emoji || '👤');
+        } else {
+            // 如果还没有收到对手头像，尝试从好友列表获取
+            if (window.conn && typeof Account.getFriendAvatar === 'function') {
+                const friendAvatar = Account.getFriendAvatar(window.conn.peer);
+                if (friendAvatar) {
+                    enemyAvatarHtml = friendAvatar.custom 
+                        ? `<img src="${friendAvatar.custom}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`
+                        : (friendAvatar.emoji || '👤');
+                }
+            }
+        }
+    } else if (window.mode === "ai") {
+        enemyAvatarHtml = '🤖'; // AI 对手显示机器人图标
+    } else if (window.mode === "local") {
+        enemyAvatarHtml = '👤'; // 本地对战显示默认头像
+    }
+    
+    const enemyAvatarElement = enemySide === window.B ? document.getElementById("blackAvatar") : document.getElementById("whiteAvatar");
+    if (enemyAvatarElement) {
+        enemyAvatarElement.innerHTML = enemyAvatarHtml;
+    } else {
+        console.log("updateBattleAvatars: 敌方头像元素不存在, enemySide:", enemySide);
+    }
+}
+
+function addFx(ps, fc, dur) { 
+    ps.forEach(p => { 
+        const c=window.be.children[p.y*window.S+p.x]; 
+        if (c) {
+            c.classList.add(fc); 
+            setTimeout(()=>c.classList.remove(fc), dur); 
+        }
+    }); 
+}
+
+function addSkillEffect(skillName, positions, duration = 500) {
+    const effectMap = {
+        "blast": "blast",
+        "thunder": "thunder",
+        "copy": "copy",
+        "sediment": "sediment",
+        "cannonAttack": "cannon-attack",
+        "sitKill": "sit-kill",
+        "redSpider": "red-spider",
+        "shield": "shield",
+        "domain": "domain"
+    };
+    const effectClass = effectMap[skillName] || "blast";
+    addFx(positions, effectClass, duration);
+}
+
 function render() {
     if (!window.be || !window.board || !window.board.length) return;
     const cells = window.be.children;
     for (let i=0; i<cells.length; i++) {
         const x = i%window.S, y = Math.floor(i/window.S);
         const c = cells[i];
-        const keepFx = ["blast","thunder","copy"].filter(f => c.classList.contains(f));
+        const keepFx = ["blast","thunder","copy","sediment","cannon-attack","sit-kill","red-spider","shield","domain"].filter(f => c.classList.contains(f));
         c.className = "cell " + keepFx.join(" ");
         c.innerHTML = "";
         if (!window.board[y] || typeof window.board[y][x] === 'undefined') continue;
@@ -1125,6 +1388,13 @@ function endGame(w) {
     clearPrev(); clearAttackTargets();
     window.wheelResult = "";
     window.sitKillSelected = [];
+    
+    // 更新段位统计
+    if (window.mode === "ai" && window.Account && window.Account.currentUser) {
+        const isWin = w === window.B;
+        window.Account.updateUserStats(isWin);
+    }
+    
     setStatus(`游戏结束！${w===window.B?"黑":"白"}胜！`);
     document.querySelectorAll(".btn.skill").forEach(b => b.style.display = "none");
     cleanupConnection();
@@ -1306,6 +1576,43 @@ function initPeerConnection(targetId, isHost, onConnected) {
 
 function setupConnection(conn) {
     console.log("setupConnection: 设置连接数据监听, conn.peer=", conn.peer);
+    
+    // 连接建立后，发送自己的头像信息
+    if (Account && Account.currentUser) {
+        let myAvatar;
+        if (typeof Account.getCurrentAvatar === 'function') {
+            myAvatar = Account.getCurrentAvatar();
+        } else if (typeof Account.getAvatar === 'function') {
+            myAvatar = Account.getAvatar(Account.currentUser.avatarId);
+        } else {
+            myAvatar = { id: 1, emoji: '👤', custom: null, name: "默认头像" };
+        }
+        
+        // 确保连接已打开后再发送数据
+        if (conn.open) {
+            conn.send({
+                type: "avatar",
+                data: {
+                    userId: Account.currentUser.userId,
+                    username: Account.currentUser.username,
+                    avatar: myAvatar
+                }
+            });
+        } else {
+            // 如果连接还未打开，等待打开后再发送
+            conn.once("open", () => {
+                conn.send({
+                    type: "avatar",
+                    data: {
+                        userId: Account.currentUser.userId,
+                        username: Account.currentUser.username,
+                        avatar: myAvatar
+                    }
+                });
+            });
+        }
+    }
+    
     conn.on("data", (data) => {
         console.log("setupConnection: 收到数据, type:", data.type, "conn.peer=", conn.peer);
         console.log("setupConnection: 数据内容:", JSON.stringify(data));
@@ -1316,10 +1623,24 @@ function setupConnection(conn) {
             if (conn.open) conn.send({ type: "pong" });
         } else if (data.type === "pong") {
             window._lastPong = Date.now();
+        } else if (data.type === "avatar") {
+            // 收到对手头像信息
+            console.log("setupConnection: 收到对手头像信息");
+            if (data.data && data.data.avatar) {
+                // 保存对手头像信息
+                window.opponentAvatar = data.data.avatar;
+                // 更新对战面板中的头像
+                updateBattleAvatars();
+            }
         }
     });
     conn.on("close", () => {
         showConnStatus("failed", "对方断开");
+        // 如果用户已主动退出，不进行重连
+        if (window._userQuit) {
+            console.log("连接断开：用户已主动退出");
+            return;
+        }
         if (!window.over && window.isInGame) {
             alert("连接断开，尝试重连...");
             attemptReconnect();
@@ -1390,7 +1711,8 @@ function handleGameMessage(d) {
     // 处理聊天消息
     if (d.type === "chat") {
         console.log("handleGameMessage: 收到聊天消息:", d.payload.message);
-        addChatMessage("对手", d.payload.message, "other");
+        const senderName = d.payload.fromName || "对手";
+        addChatMessage(senderName, d.payload.message, "other");
         return;
     }
     if (d.type === "move") {

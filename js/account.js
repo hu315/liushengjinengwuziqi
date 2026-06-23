@@ -15,6 +15,51 @@ const Account = {
         return false;
     },
 
+    // 段位等级配置
+    RANK_LEVELS: [
+        { level: 1, name: "入门", color: "#94a3b8", minScore: 0 },
+        { level: 2, name: "业余", color: "#22c55e", minScore: 100 },
+        { level: 3, name: "业余二段", color: "#10b981", minScore: 200 },
+        { level: 4, name: "业余三段", color: "#06b6d4", minScore: 400 },
+        { level: 5, name: "业余四段", color: "#3b82f6", minScore: 600 },
+        { level: 6, name: "业余五段", color: "#8b5cf6", minScore: 800 },
+        { level: 7, name: "业余六段", color: "#d946ef", minScore: 1000 },
+        { level: 8, name: "专业", color: "#f59e0b", minScore: 1500 },
+        { level: 9, name: "专业二段", color: "#f97316", minScore: 2000 },
+        { level: 10, name: "专业三段", color: "#ef4444", minScore: 3000 },
+        { level: 11, name: "大师", color: "#00f0ff", minScore: 5000 },
+        { level: 12, name: "棋圣", color: "#ffd700", minScore: 8000 }
+    ],
+
+    getRankByScore(score) {
+        for (let i = this.RANK_LEVELS.length - 1; i >= 0; i--) {
+            if (score >= this.RANK_LEVELS[i].minScore) {
+                return this.RANK_LEVELS[i];
+            }
+        }
+        return this.RANK_LEVELS[0];
+    },
+
+    // 可用头像列表
+    AVATARS: [
+        { id: 1, emoji: "👨‍💼", name: "商务人士" },
+        { id: 2, emoji: "👩‍💼", name: "职场女性" },
+        { id: 3, emoji: "🧑‍🎨", name: "艺术家" },
+        { id: 4, emoji: "🧑‍💻", name: "程序员" },
+        { id: 5, emoji: "👨‍🔬", name: "科学家" },
+        { id: 6, emoji: "🧑‍⚕️", name: "医生" },
+        { id: 7, emoji: "👩‍🔧", name: "工程师" },
+        { id: 8, emoji: "🧑‍🎓", name: "学生" },
+        { id: 9, emoji: "🦸", name: "超级英雄" },
+        { id: 10, emoji: "🧙", name: "法师" },
+        { id: 11, emoji: "🦋", name: "蝴蝶" },
+        { id: 12, emoji: "🐱", name: "猫咪" },
+        { id: 13, emoji: "🐶", name: "狗狗" },
+        { id: 14, emoji: "🦊", name: "狐狸" },
+        { id: 15, emoji: "🐼", name: "熊猫" },
+        { id: 16, emoji: "🐸", name: "青蛙" }
+    ],
+
     register(username, pwd) {
         if (!username || !pwd) return { ok: false, msg: "用户名和密码不能为空" };
         if (username.length < 2) return { ok: false, msg: "用户名至少2位" };
@@ -25,12 +70,122 @@ const Account = {
         let userId;
         do { userId = Math.floor(100000 + Math.random() * 900000).toString(); }
         while (userList.find(u => u.userId === userId));
-        const user = { username, userId, password: btoa(pwd) };
+        // 随机选择一个头像
+        const randomAvatar = this.AVATARS[Math.floor(Math.random() * this.AVATARS.length)];
+        const user = { 
+            username, 
+            userId, 
+            password: btoa(pwd),
+            rankScore: 0,
+            wins: 0,
+            losses: 0,
+            draws: 0,
+            avatarId: randomAvatar.id
+        };
         userList.push(user);
         localStorage.setItem("userList", JSON.stringify(userList));
         this.currentUser = user;
         localStorage.setItem("currentUser", JSON.stringify(user));
         return { ok: true, user };
+    },
+
+    getAvatar(avatarId) {
+        return this.AVATARS.find(a => a.id === avatarId) || this.AVATARS[0];
+    },
+
+    changeAvatar(avatarId) {
+        if (!this.currentUser) return { ok: false, msg: "请先登录" };
+        const avatar = this.getAvatar(avatarId);
+        if (!avatar) return { ok: false, msg: "无效的头像ID" };
+        this.currentUser.avatarId = avatarId;
+        this.currentUser.customAvatar = null;
+        this.saveUser(this.currentUser);
+        return { ok: true, avatar };
+    },
+
+    uploadCustomAvatar(imageFile) {
+        return new Promise((resolve) => {
+            if (!this.currentUser) {
+                resolve({ ok: false, msg: "请先登录" });
+                return;
+            }
+            
+            if (!imageFile || !imageFile.type.startsWith('image/')) {
+                resolve({ ok: false, msg: "请选择有效的图片文件" });
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const base64Data = e.target.result;
+                // 限制图片大小（约 100KB）
+                if (base64Data.length > 133120) {
+                    resolve({ ok: false, msg: "图片大小不能超过 100KB" });
+                    return;
+                }
+                
+                this.currentUser.customAvatar = base64Data;
+                this.currentUser.avatarId = 0; // 标记为自定义头像
+                this.saveUser(this.currentUser);
+                resolve({ ok: true, avatar: { emoji: null, custom: base64Data } });
+            };
+            reader.onerror = () => {
+                resolve({ ok: false, msg: "图片读取失败" });
+            };
+            reader.readAsDataURL(imageFile);
+        });
+    },
+
+    getCurrentAvatar() {
+        if (!this.currentUser) return this.AVATARS[0];
+        if (this.currentUser.customAvatar) {
+            return { id: 0, emoji: null, custom: this.currentUser.customAvatar, name: "自定义头像" };
+        }
+        return this.getAvatar(this.currentUser.avatarId);
+    },
+
+    getFriendAvatar(userId) {
+        // 从好友信息中获取头像数据
+        const friends = this.getFriends();
+        const friend = friends.find(f => f.userId === userId);
+        if (friend && friend.avatar) {
+            return friend.avatar;
+        }
+        // 如果没有自定义头像，返回默认头像
+        return { id: 1, emoji: '👤', custom: null, name: "默认头像" };
+    },
+
+    updateUserStats(isWin, isDraw = false) {
+        if (!this.currentUser) return;
+        if (isDraw) {
+            this.currentUser.draws = (this.currentUser.draws || 0) + 1;
+        } else if (isWin) {
+            this.currentUser.wins = (this.currentUser.wins || 0) + 1;
+            this.currentUser.rankScore = (this.currentUser.rankScore || 0) + 100;
+        } else {
+            this.currentUser.losses = (this.currentUser.losses || 0) + 1;
+            const newScore = Math.max(0, (this.currentUser.rankScore || 0) - 20);
+            this.currentUser.rankScore = newScore;
+        }
+        // 更新本地存储
+        this.saveUser(this.currentUser);
+    },
+
+    saveUser(user) {
+        // 更新当前用户
+        localStorage.setItem("currentUser", JSON.stringify(user));
+        // 更新用户列表
+        let userList = JSON.parse(localStorage.getItem("userList") || "[]");
+        const index = userList.findIndex(u => u.userId === user.userId);
+        if (index !== -1) {
+            userList[index] = user;
+            localStorage.setItem("userList", JSON.stringify(userList));
+        }
+    },
+
+    getCurrentRank() {
+        if (!this.currentUser) return this.RANK_LEVELS[0];
+        return this.getRankByScore(this.currentUser.rankScore || 0);
     },
 
     login(username, pwd) {
@@ -62,10 +217,14 @@ const Account = {
         return JSON.parse(localStorage.getItem(`friends_${this.currentUser.userId}`) || "[]");
     },
 
-    _addFriendDirect(userId, remark) {
+    _addFriendDirect(userId, remark, avatar = null) {
         const friends = this.getFriends();
         if (friends.find(f => f.userId === userId)) return false;
-        friends.push({ userId, remark: remark || `玩家${userId}` });
+        friends.push({ 
+            userId, 
+            remark: remark || `玩家${userId}`,
+            avatar: avatar || { id: 1, emoji: '👤', custom: null, name: "默认头像" }
+        });
         localStorage.setItem(`friends_${this.currentUser.userId}`, JSON.stringify(friends));
         this.renderFriendList();
         return true;
@@ -90,14 +249,29 @@ const Account = {
                 list.forEach(f => {
                     const item = document.createElement("div");
                     item.className = "friend-item";
+                    // 获取好友头像
+                    const friendAvatar = this.getFriendAvatar(f.userId);
+                    const avatarHtml = friendAvatar.custom 
+                        ? `<img src="${friendAvatar.custom}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`
+                        : (friendAvatar.emoji || '👤');
+                    // 获取好友状态
+                    const status = this.getFriendStatus(f.userId);
+                    const statusText = this.getStatusText(status);
+                    const statusClass = this.getStatusClass(status);
+                    
                     item.innerHTML = `
-                        <div style="flex:1; min-width:0; overflow:hidden;">
+                        <div class="friend-avatar-display">
+                            ${avatarHtml}
+                            <div class="status-indicator ${statusClass}"></div>
+                        </div>
+                        <div class="friend-info">
                             <div class="name">${f.remark}</div>
                             <div class="id">ID: ${f.userId}</div>
+                            <div class="status-badge ${statusClass}">${statusText}</div>
                         </div>
                         <div class="btn-group">
                             <button class="chat-btn" data-id="${f.userId}">💬</button>
-                            <button class="invite-btn" data-id="${f.userId}">⚔️</button>
+                            <button class="invite-btn" data-id="${f.userId}" ${status === 'offline' ? 'disabled' : ''}>⚔️</button>
                             <button class="del-btn" data-id="${f.userId}">×</button>
                         </div>
                     `;
@@ -117,14 +291,29 @@ const Account = {
                 list.forEach(f => {
                     const item = document.createElement("div");
                     item.className = "friend-item";
+                    // 获取好友头像
+                    const friendAvatar = this.getFriendAvatar(f.userId);
+                    const avatarHtml = friendAvatar.custom 
+                        ? `<img src="${friendAvatar.custom}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`
+                        : (friendAvatar.emoji || '👤');
+                    // 获取好友状态
+                    const status = this.getFriendStatus(f.userId);
+                    const statusText = this.getStatusText(status);
+                    const statusClass = this.getStatusClass(status);
+                    
                     item.innerHTML = `
-                        <div style="flex:1; min-width:0; overflow:hidden;">
+                        <div class="friend-avatar-display">
+                            ${avatarHtml}
+                            <div class="status-indicator ${statusClass}"></div>
+                        </div>
+                        <div class="friend-info">
                             <div class="name">${f.remark}</div>
                             <div class="id">ID: ${f.userId}</div>
+                            <div class="status-badge ${statusClass}">${statusText}</div>
                         </div>
                         <div class="btn-group">
                             <button class="chat-btn" data-id="${f.userId}">💬</button>
-                            <button class="invite-btn" data-id="${f.userId}">⚔️</button>
+                            <button class="invite-btn" data-id="${f.userId}" ${status === 'offline' ? 'disabled' : ''}>⚔️</button>
                             <button class="del-btn" data-id="${f.userId}">×</button>
                         </div>
                     `;
@@ -132,6 +321,131 @@ const Account = {
                     mobileContainer.appendChild(item);
                 });
             }
+        }
+    },
+    
+    getFriendStatus(userId) {
+        // 如果正在检查状态，返回检查中
+        if (this._checkingStatus && this._checkingStatus[userId]) {
+            return 'checking';
+        }
+        if (!window.peer || window.peer.destroyed) {
+            return 'offline';
+        }
+        // 检查是否有活跃连接
+        if (window.conn && window.conn.peer === userId) {
+            return window.isInGame ? 'playing' : 'online';
+        }
+        // 检查缓存的状态
+        const statusCache = localStorage.getItem(`friendStatus_${userId}`);
+        if (statusCache) {
+            const parsed = JSON.parse(statusCache);
+            // 状态缓存有效期2分钟
+            if (Date.now() - parsed.time < 120000) {
+                return parsed.status;
+            }
+        }
+        return 'offline';
+    },
+    
+    getStatusText(status) {
+        switch (status) {
+            case 'online':
+                return '空闲';
+            case 'playing':
+                return '游戏中';
+            case 'offline':
+            default:
+                return '已下线';
+        }
+    },
+    
+    getStatusClass(status) {
+        switch (status) {
+            case 'online':
+                return 'status-online';
+            case 'playing':
+                return 'status-playing';
+            case 'offline':
+            default:
+                return 'status-offline';
+        }
+    },
+    
+    updateFriendStatus(userId, status) {
+        localStorage.setItem(`friendStatus_${userId}`, JSON.stringify({
+            status,
+            time: Date.now()
+        }));
+        this.renderFriendList();
+    },
+    
+    checkFriendOnlineStatus(userId) {
+        if (!window.peer || window.peer.destroyed) return;
+        
+        // 避免重复检查
+        if (!this._checkingStatus) this._checkingStatus = {};
+        if (this._checkingStatus[userId]) return;
+        this._checkingStatus[userId] = true;
+        
+        const conn = window.peer.connect(userId, { reliable: true });
+        const timeout = setTimeout(() => {
+            if (conn.open) conn.close();
+            this._checkingStatus[userId] = false;
+            this.updateFriendStatus(userId, 'offline');
+        }, 3000);
+        
+        conn.on("open", () => {
+            clearTimeout(timeout);
+            // 发送状态查询
+            conn.send({ type: "statusQuery" });
+            setTimeout(() => {
+                if (conn.open) conn.close();
+                this._checkingStatus[userId] = false;
+            }, 500);
+        });
+        
+        conn.on("data", (data) => {
+            if (data.type === "statusReply") {
+                this._checkingStatus[userId] = false;
+                this.updateFriendStatus(userId, data.status);
+            }
+        });
+        
+        conn.on("error", () => {
+            clearTimeout(timeout);
+            this._checkingStatus[userId] = false;
+            this.updateFriendStatus(userId, 'offline');
+        });
+        
+        conn.on("close", () => {
+            this._checkingStatus[userId] = false;
+        });
+    },
+    
+    checkAllFriendsOnlineStatus() {
+        const friends = this.getFriends();
+        friends.forEach(f => {
+            this.checkFriendOnlineStatus(f.userId);
+        });
+    },
+    
+    startStatusRefresh() {
+        // 每30秒刷新一次好友状态
+        if (this._statusRefreshTimer) {
+            clearInterval(this._statusRefreshTimer);
+        }
+        this._statusRefreshTimer = setInterval(() => {
+            if (window.peer && !window.peer.destroyed) {
+                this.checkAllFriendsOnlineStatus();
+            }
+        }, 30000);
+    },
+    
+    stopStatusRefresh() {
+        if (this._statusRefreshTimer) {
+            clearInterval(this._statusRefreshTimer);
+            this._statusRefreshTimer = null;
         }
     },
     

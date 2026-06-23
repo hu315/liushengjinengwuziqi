@@ -31,9 +31,80 @@
     </div>
     <div id="status" class="status-black">请先登录</div>
     <div class="player-stats">
-        <div id="bs" class="stat black"><h3>黑方（先手）</h3><p>次数：<span id="bc">-</span></p><div class="skill-desc" id="bd">未选择技能</div></div>
-        <div id="ws" class="stat white"><h3>白方（后手）</h3><p>次数：<span id="wc">-</span></p><div class="skill-desc" id="wd">未选择技能</div></div>
+        <div id="bs" class="stat black">
+            <div class="stat-header">
+                <div class="stat-avatar" id="blackAvatar">👤</div>
+                <h3>黑方（先手）</h3>
+            </div>
+            <div id="blackRank" class="rank-badge" style="display:none;">🏆 入门</div>
+            <p>次数：<span id="bc">-</span></p>
+            <div class="skill-desc" id="bd">未选择技能</div>
+        </div>
+        <div id="ws" class="stat white">
+            <div class="stat-header">
+                <div class="stat-avatar" id="whiteAvatar">👤</div>
+                <h3>白方（后手）</h3>
+            </div>
+            <div id="whiteRank" class="rank-badge" style="display:none;">🏆 入门</div>
+            <p>次数：<span id="wc">-</span></p>
+            <div class="skill-desc" id="wd">未选择技能</div>
+        </div>
     </div>
+    
+    <!-- 当前用户段位信息 -->
+    <div id="currentUserRank" class="player-panel" style="display:none; position: absolute; top: 10px; right: 10px;">
+        <div class="player-avatar" id="playerAvatar" style="cursor: pointer;">👤</div>
+        <div class="player-name" id="playerName">玩家</div>
+        <div id="userRankBadge" class="rank-badge">🏆 入门</div>
+        <div class="player-stats">
+            <span>🏆 <span id="statWins">0</span></span>
+            <span>💀 <span id="statLosses">0</span></span>
+            <span>🤝 <span id="statDraws">0</span></span>
+        </div>
+    </div>
+    
+    <!-- 设置面板模态框 -->
+    <div id="settingsModal" class="modal"><div class="modal-box settings-box">
+        <div class="settings-header">
+            <h3>⚙️ 设置</h3>
+            <button class="settings-close" onclick="document.getElementById('settingsModal').classList.remove('show')">×</button>
+        </div>
+        
+        <!-- 用户信息 -->
+        <div class="settings-section">
+            <div class="settings-title">👤 个人信息</div>
+            <div class="user-info-box">
+                <div class="current-avatar" id="currentAvatarDisplay">👤</div>
+                <div class="user-details">
+                    <div class="user-name" id="settingsUserName">玩家</div>
+                    <div id="settingsRankBadge" class="rank-badge">🏆 入门</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 头像设置 -->
+        <div class="settings-section">
+            <div class="settings-title">🎭 更换头像</div>
+            <!-- 自定义头像上传 -->
+            <div class="custom-avatar-upload">
+                <label class="upload-btn">
+                    <input type="file" id="avatarUpload" accept="image/*" style="display:none;">
+                    <span class="upload-icon">📤</span>
+                    <span class="upload-text">上传自定义头像</span>
+                </label>
+                <p class="upload-hint">支持 JPG、PNG、GIF 格式，建议尺寸 100x100</p>
+            </div>
+            <div id="avatarList" class="avatar-list"></div>
+        </div>
+        
+        <!-- 主题设置 -->
+        <div class="settings-section">
+            <div class="settings-title">🎨 棋盘主题</div>
+            <div id="themeList" class="theme-list"></div>
+        </div>
+        
+        <button class="btn cancel settings-close-btn" onclick="document.getElementById('settingsModal').classList.remove('show')">关闭</button>
+    </div></div>
     <div class="main">
         <div id="board" class="board"></div>
         <div class="skills">
@@ -169,6 +240,7 @@
             <button class="btn-add" id="btnMessage" style="background:var(--warning-color); color:#fff; border:none; border-radius:4px; padding:4px 10px; font-size:12px; cursor:pointer; position:relative;">
                 <span id="msgBadge" style="display:none; background:var(--danger-color); color:#fff; border-radius:50%; padding:1px 6px; font-size:11px; margin-left:4px;">0</span>
             </button>
+            <button class="btn-add" id="btnRefreshFriends" title="刷新好友状态">↻ 刷新</button>
             <button class="btn-add" id="btnAddFriend">+ 添加</button>
         </div>
     </div>

@@ -45,7 +45,7 @@ const Chat = {
             this.sendChatMessage(this.currentTarget, content);
             return;
         }
-        const msg = { from: Account.currentUser.userId, content: content.trim(), time: Date.now() };
+        const msg = { from: Account.currentUser.userId, fromName: Account.currentUser.username, content: content.trim(), time: Date.now() };
         window.conn.send({ type: "chat", data: msg });
         this.saveMsg(this.currentTarget, msg);
         this.renderHistory();
@@ -58,7 +58,7 @@ const Chat = {
         const timeout = setTimeout(() => { if (conn.open) conn.close(); alert("发送失败，对方不在线"); }, 5000);
         conn.on("open", () => {
             clearTimeout(timeout);
-            const msg = { from: Account.currentUser.userId, content: content.trim(), time: Date.now() };
+            const msg = { from: Account.currentUser.userId, fromName: Account.currentUser.username, content: content.trim(), time: Date.now() };
             conn.send({ type: "chat", data: msg });
             this.saveMsg(targetId, msg);
             this.renderHistory();
@@ -101,6 +101,14 @@ function showConfirmModal(title, message, onAccept, onReject) {
 }
 
 function handlePeerData(data, conn) {
+    // 处理状态查询
+    if (data.type === "statusQuery") {
+        const status = window.isInGame ? 'playing' : 'online';
+        if (conn && conn.open) {
+            conn.send({ type: "statusReply", status });
+        }
+        return;
+    }
     if (data.type === "friendRequest") {
         Account.addMessage({ type: "friendRequest", from: data.from, fromName: data.fromName, remark: data.remark, time: data.time, reply: false });
         Account.updateMessageBadge();
@@ -208,6 +216,31 @@ document.addEventListener("DOMContentLoaded", function() {
     if (saved) {
         try { document.getElementById("loginUser").value = JSON.parse(saved).username || ""; } catch(e) {}
     }
+    
+    // 头像上传事件处理
+    const avatarUpload = document.getElementById("avatarUpload");
+    if (avatarUpload) {
+        avatarUpload.addEventListener("change", async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            
+            if (Account && Account.uploadCustomAvatar) {
+                const result = await Account.uploadCustomAvatar(file);
+                if (result.ok) {
+                    updateRankDisplay();
+                    updateSettingsPanel();
+                    // 更新头像列表的选中状态
+                    if (typeof renderAvatarList === 'function') {
+                        renderAvatarList();
+                    }
+                } else {
+                    alert(result.msg);
+                }
+            }
+            // 重置文件输入
+            e.target.value = "";
+        });
+    }
 
     document.querySelectorAll(".tab").forEach(t => {
         t.onclick = () => {
@@ -260,6 +293,12 @@ document.addEventListener("DOMContentLoaded", function() {
             document.getElementById("addFriendTip").textContent = "";
         } else {
             document.getElementById("addFriendTip").textContent = res.msg;
+        }
+    };
+
+    document.getElementById("btnRefreshFriends").onclick = () => {
+        if (typeof Account.checkAllFriendsOnlineStatus === 'function') {
+            Account.checkAllFriendsOnlineStatus();
         }
     };
 
@@ -320,6 +359,108 @@ document.addEventListener("DOMContentLoaded", function() {
     window.addEventListener("resize", toggleResponsiveUI);
 });
 
+function updateRankDisplay() {
+    if (!Account || !Account.currentUser) return;
+    
+    const user = Account.currentUser;
+    const rank = Account.getCurrentRank();
+    const avatar = Account.getCurrentAvatar ? Account.getCurrentAvatar() : Account.getAvatar(user.avatarId);
+    
+    // 更新玩家头像
+    const playerAvatar = document.getElementById("playerAvatar");
+    if (playerAvatar) {
+        if (avatar.custom) {
+            playerAvatar.innerHTML = `<img src="${avatar.custom}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">`;
+        } else {
+            playerAvatar.textContent = avatar.emoji || '👤';
+        }
+    }
+    
+    // 更新玩家名称
+    const playerName = document.getElementById("playerName");
+    if (playerName) {
+        playerName.textContent = user.username || "玩家";
+    }
+    
+    // 更新段位徽章
+    const rankBadge = document.getElementById("userRankBadge");
+    if (rankBadge) {
+        rankBadge.textContent = `🏆 ${rank.name}`;
+        rankBadge.style.background = `linear-gradient(135deg, ${rank.color}40, ${rank.color}20)`;
+        rankBadge.style.border = `1px solid ${rank.color}`;
+        rankBadge.style.color = rank.color;
+    }
+    
+    // 更新统计数据
+    const wins = document.getElementById("statWins");
+    const losses = document.getElementById("statLosses");
+    const draws = document.getElementById("statDraws");
+    
+    if (wins) wins.textContent = user.wins || 0;
+    if (losses) losses.textContent = user.losses || 0;
+    if (draws) draws.textContent = user.draws || 0;
+    
+    // 显示段位面板
+    const rankPanel = document.getElementById("currentUserRank");
+    if (rankPanel) {
+        rankPanel.style.display = "block";
+    }
+    
+    // 更新设置面板中的用户信息
+    updateSettingsPanel();
+}
+
+function updateSettingsPanel() {
+    if (!Account || !Account.currentUser) return;
+    
+    const user = Account.currentUser;
+    const rank = Account.getCurrentRank();
+    const avatar = Account.getCurrentAvatar ? Account.getCurrentAvatar() : Account.getAvatar(user.avatarId);
+    
+    // 更新设置面板中的头像
+    const currentAvatarDisplay = document.getElementById("currentAvatarDisplay");
+    if (currentAvatarDisplay) {
+        if (avatar.custom) {
+            currentAvatarDisplay.innerHTML = `<img src="${avatar.custom}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">`;
+        } else {
+            currentAvatarDisplay.textContent = avatar.emoji || '👤';
+        }
+    }
+    
+    // 更新设置面板中的用户名
+    const settingsUserName = document.getElementById("settingsUserName");
+    if (settingsUserName) {
+        settingsUserName.textContent = user.username || "玩家";
+    }
+    
+    // 更新设置面板中的段位徽章
+    const settingsRankBadge = document.getElementById("settingsRankBadge");
+    if (settingsRankBadge) {
+        settingsRankBadge.textContent = `🏆 ${rank.name}`;
+        settingsRankBadge.style.background = `linear-gradient(135deg, ${rank.color}40, ${rank.color}20)`;
+        settingsRankBadge.style.border = `1px solid ${rank.color}`;
+        settingsRankBadge.style.color = rank.color;
+    }
+}
+
+function openSettingsPanel() {
+    // 更新设置面板内容
+    updateSettingsPanel();
+    
+    // 渲染头像列表
+    if (typeof renderAvatarList === 'function') {
+        renderAvatarList();
+    }
+    
+    // 渲染主题列表
+    if (typeof renderThemeList === 'function') {
+        renderThemeList();
+    }
+    
+    // 显示设置面板
+    document.getElementById("settingsModal").classList.add("show");
+}
+
 function afterLogin() {
     const isDev = Account.isDeveloper();
     document.getElementById("myUserId").textContent = Account.currentUser.userId;
@@ -327,6 +468,44 @@ function afterLogin() {
     const gameContent = document.getElementById("gameContent");
     const adminPanel = document.getElementById("adminPanel");
     const startBtn = document.getElementById("btnStartGame");
+
+    // 更新段位显示
+    updateRankDisplay();
+    
+    // 延迟检查好友在线状态（等待 peer 初始化完成）
+    setTimeout(() => {
+        if (typeof Account.checkAllFriendsOnlineStatus === 'function') {
+            Account.checkAllFriendsOnlineStatus();
+        }
+        // 启动状态定时刷新
+        if (typeof Account.startStatusRefresh === 'function') {
+            Account.startStatusRefresh();
+        }
+    }, 1000);
+    
+    // 初始化主题
+    if (typeof applyTheme === 'function' && typeof getCurrentTheme === 'function') {
+        const currentTheme = getCurrentTheme();
+        applyTheme(currentTheme.id);
+    }
+    
+    // 渲染头像列表
+    if (typeof renderAvatarList === 'function') {
+        renderAvatarList();
+    }
+    
+    // 渲染主题列表
+    if (typeof renderThemeList === 'function') {
+        renderThemeList();
+    }
+    
+    // 绑定头像点击事件（打开设置面板）
+    const playerAvatar = document.getElementById("playerAvatar");
+    if (playerAvatar) {
+        playerAvatar.onclick = () => {
+            openSettingsPanel();
+        };
+    }
 
     if (isDev) {
         if (gameContent) gameContent.style.display = "none";
