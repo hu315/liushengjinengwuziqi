@@ -15,10 +15,10 @@
 
 <!-- 开发者管理面板 -->
 <div id="adminPanel" style="display:none;">
-    <h2 style="text-align:center;color:#333;">🔧 账号管理</h2>
-    <p style="text-align:center;color:#666;margin-bottom:15px;">开发者模式 — 管理所有注册账号</p>
+    <h2 style="text-align:center;color:var(--text-primary);">🔧 账号管理</h2>
+    <p style="text-align:center;color:var(--text-muted);margin-bottom:15px;">开发者模式 — 管理所有注册账号</p>
     <div id="adminUserList"></div>
-    <p style="text-align:center;color:#999;font-size:12px;margin-top:15px;">共 <span id="adminTotalCount">0</span> 个账号</p>
+    <p style="text-align:center;color:var(--text-muted);font-size:12px;margin-top:15px;">共 <span id="adminTotalCount">0</span> 个账号</p>
 </div>
 
 <!-- 游戏内容 -->
@@ -48,6 +48,7 @@
             <button id="btnRps" class="btn skill">赌徒</button>
             <button id="btnCancel" class="btn cancel">取消技能</button>
             <button id="btnBack" class="btn back">返回主菜单</button>
+            <button class="chat-toggle" id="chatToggleBtn" style="display:none;">+</button>
         </div>
     </div>
 </div>
@@ -69,7 +70,7 @@
 
 <div id="diffModal" class="modal"><div class="modal-box" style="min-width:520px">
 <h3>选择闯关难度</h3>
-<p style="color:#666;font-size:13px">每个难度连续挑战3局，难度逐局提升，胜利可获得增益奖励</p>
+<p style="color:var(--text-muted);font-size:13px">每个难度连续挑战3局，难度逐局提升，胜利可获得增益奖励</p>
 <div class="difficulty-grid" id="diffGrid"></div>
 <div class="diff-desc" id="diffDesc">请选择一个难度查看详情</div>
 <div class="btn-group">
@@ -106,7 +107,8 @@
 
 <div id="wheelModal" class="modal"><div class="modal-box">
 <h3>赌徒转盘</h3>
-<p style="color:#666;font-size:13px;margin-bottom:15px">转动后自动生效，获得落子机会需手动落子</p>
+<p style="color:var(--text-muted);font-size:13px;margin-bottom:15px">转动后自动生效，获得落子机会需手动落子</p>
+<div class="wheel-result" id="wheelResultDisplay"></div>
 <div class="wheel-wrap">
   <div class="pointer"></div>
   <div class="wheel" id="wheel">
@@ -120,6 +122,22 @@
 </div>
 <button id="spinBtn">开始转动</button>
 </div></div>
+
+<!-- 消息通知容器 -->
+<div class="notification-container" id="notificationContainer"></div>
+
+<!-- 游戏聊天窗口 -->
+<div class="chat-panel" id="chatPanel">
+    <div class="chat-header">
+        <span>💬 聊天</span>
+        <button class="chat-close" id="chatCloseBtn">&times;</button>
+    </div>
+    <div class="chat-messages" id="chatMessages"></div>
+    <div class="chat-input">
+        <input type="text" id="chatInput" placeholder="输入消息..." maxlength="50">
+        <button id="chatSendBtn">发送</button>
+    </div>
+</div>
 
 <div class="modal" id="loginModal">
     <div class="modal-box">
@@ -138,9 +156,9 @@
             <input class="input" id="regPwd" type="password" placeholder="密码">
             <input class="input" id="regPwd2" type="password" placeholder="确认密码">
             <button class="btn mode" id="btnRegister">注册并自动生成ID</button>
-            <p style="font-size:12px;color:#666;margin-top:8px">系统将自动分配6位数字ID，用于添加好友和联机对战</p>
+            <p style="font-size:12px;color:var(--text-muted);margin-top:8px">系统将自动分配6位数字ID，用于添加好友和联机对战</p>
         </div>
-        <p id="loginTip" style="color:#e74c3c;font-size:13px;margin-top:10px"></p>
+        <p id="loginTip" style="color:var(--danger-color);font-size:13px;margin-top:10px"></p>
     </div>
 </div>
 
@@ -148,9 +166,8 @@
     <div class="friend-header">
         <span>好友列表</span>
         <div style="display:flex; gap:6px; align-items:center;">
-            <button class="btn-add" id="btnMessage" style="background:#f39c12; color:#fff; border:none; border-radius:4px; padding:4px 10px; font-size:12px; cursor:pointer; position:relative;">
-                📩 消息
-                <span id="msgBadge" style="display:none; background:#e74c3c; color:#fff; border-radius:50%; padding:1px 6px; font-size:11px; margin-left:4px;">0</span>
+            <button class="btn-add" id="btnMessage" style="background:var(--warning-color); color:#fff; border:none; border-radius:4px; padding:4px 10px; font-size:12px; cursor:pointer; position:relative;">
+                <span id="msgBadge" style="display:none; background:var(--danger-color); color:#fff; border-radius:50%; padding:1px 6px; font-size:11px; margin-left:4px;">0</span>
             </button>
             <button class="btn-add" id="btnAddFriend">+ 添加</button>
         </div>
@@ -164,7 +181,7 @@
 
 <div class="modal" id="messageModal">
     <div class="modal-box" style="min-width:360px; max-height:70vh; overflow-y:auto; position:relative;">
-        <button id="closeMessageModal" style="position:absolute; top:10px; right:15px; background:none; border:none; font-size:24px; cursor:pointer; color:#999;">&times;</button>
+        <button id="closeMessageModal" style="position:absolute; top:10px; right:15px; background:none; border:none; font-size:24px; cursor:pointer; color:var(--text-muted);">&times;</button>
         <h3>📩 消息中心</h3>
         <div id="messageList" style="margin-top:12px;"></div>
     </div>
@@ -188,7 +205,7 @@
     </div>
     <div class="chat-body" id="chatBody"></div>
     <div class="chat-input">
-        <input id="chatInput" placeholder="输入消息...">
+        <input id="friendChatInput" placeholder="输入消息...">
         <button id="btnSendChat">发送</button>
     </div>
 </div>
@@ -198,7 +215,7 @@
         <h3>添加好友</h3>
         <input class="input" id="friendIdInput" placeholder="输入对方6位ID">
         <input class="input" id="friendRemark" placeholder="备注名（可选）">
-        <p id="addFriendTip" style="color:#e74c3c;font-size:13px"></p>
+        <p id="addFriendTip" style="color:var(--danger-color);font-size:13px"></p>
         <div class="btn-group">
             <button class="btn cancel" id="cancelAddFriend">取消</button>
             <button class="btn mode" id="confirmAddFriend">发送申请</button>
@@ -211,7 +228,7 @@
         <h3 id="editUserTitle">修改账号</h3>
         <input class="input" id="editUsername" placeholder="新用户名（留空不修改）">
         <input class="input" id="editPassword" type="password" placeholder="新密码（留空不修改）">
-        <p id="editUserTip" style="color:#e74c3c;font-size:13px;margin-top:8px"></p>
+        <p id="editUserTip" style="color:var(--danger-color);font-size:13px;margin-top:8px"></p>
         <div class="btn-group">
             <button class="btn cancel" id="cancelEditUser">取消</button>
             <button class="btn mode" id="confirmEditUser">保存修改</button>

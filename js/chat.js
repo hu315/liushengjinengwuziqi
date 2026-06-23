@@ -49,7 +49,7 @@ const Chat = {
         window.conn.send({ type: "chat", data: msg });
         this.saveMsg(this.currentTarget, msg);
         this.renderHistory();
-        document.getElementById("chatInput").value = "";
+        document.getElementById("friendChatInput").value = "";
     },
 
     sendChatMessage(targetId, content) {
@@ -62,7 +62,7 @@ const Chat = {
             conn.send({ type: "chat", data: msg });
             this.saveMsg(targetId, msg);
             this.renderHistory();
-            document.getElementById("chatInput").value = "";
+            document.getElementById("friendChatInput").value = "";
             setTimeout(() => { if (conn.open) conn.close(); }, 500);
         });
         conn.on("error", () => { clearTimeout(timeout); alert("发送失败，对方不在线"); });
@@ -105,6 +105,10 @@ function handlePeerData(data, conn) {
         Account.addMessage({ type: "friendRequest", from: data.from, fromName: data.fromName, remark: data.remark, time: data.time, reply: false });
         Account.updateMessageBadge();
         setStatus(`收到来自 ${data.fromName} 的好友申请`);
+        // 显示好友申请通知
+        if (typeof showNotification === "function") {
+            showNotification("好友申请", `${data.fromName} 申请添加您为好友`, 'friend');
+        }
         showConfirmModal(
             "好友申请",
             `用户 ${data.fromName} (ID: ${data.from}) 申请添加您为好友，是否同意？`,
@@ -137,6 +141,10 @@ function handlePeerData(data, conn) {
     else if (data.type === "invite") {
         Account.addMessage({ type: "invite", from: data.from, fromName: data.fromName, time: data.time, reply: false });
         Account.updateMessageBadge();
+        // 显示对战邀请通知
+        if (typeof showNotification === "function") {
+            showNotification("对战邀请", `${data.fromName} 邀请您进行对战`, 'chat');
+        }
         if (window.isInGame) {
             const reply = { type: "inviteReply", from: Account.currentUser.userId, accepted: false, reason: "对方正在游戏中" };
             Account.sendDataToUser(data.from, reply, () => {});
@@ -147,13 +155,17 @@ function handlePeerData(data, conn) {
             "对战邀请",
             `用户 ${data.fromName} (ID: ${data.from}) 邀请您进行对战，是否接受？`,
             () => {
-                const reply = { type: "inviteReply", from: Account.currentUser.userId, accepted: true };
-                Account.sendDataToUser(data.from, reply, () => {});
-                if (window.conn) { try { window.conn.close(); } catch(e) {} window.conn = null; }
                 window.mode = "online";
                 window.host = 0;
+                window._inviteFrom = data.from;  // 保存邀请者 ID
                 if (typeof initPeerConnection === "function") {
-                    initPeerConnection(data.from, false);
+                    initPeerConnection(data.from, false, () => {
+                        // 连接建立成功后再发送回复
+                        if (window.conn && window.conn.open) {
+                            const reply = { type: "inviteReply", from: Account.currentUser.userId, accepted: true };
+                            window.conn.send({ type: "game", data: { type: "inviteReply", payload: reply } });
+                        }
+                    });
                 }
                 setStatus("正在连接...");
             },
@@ -169,14 +181,19 @@ function handlePeerData(data, conn) {
     }
     else if (data.type === "chat") {
         Chat.receive(data.data);
+        // 显示聊天消息通知（如果不在游戏中）
+        const senderName = data.fromName || `玩家${data.from}`;
+        if (typeof showNotification === "function" && !window.isInGame) {
+            showNotification(`💬 ${senderName}`, data.data.content, 'chat');
+        }
     }
 }
 
 // ===== DOM 绑定 =====
 document.addEventListener("DOMContentLoaded", function() {
     document.getElementById("chatClose").onclick = () => Chat.close();
-    document.getElementById("btnSendChat").onclick = () => Chat.send(document.getElementById("chatInput").value);
-    document.getElementById("chatInput").onkeydown = e => { if (e.key === "Enter") Chat.send(e.target.value); };
+    document.getElementById("btnSendChat").onclick = () => Chat.send(document.getElementById("friendChatInput").value);
+    document.getElementById("friendChatInput").onkeydown = e => { if (e.key === "Enter") Chat.send(e.target.value); };
 
     document.getElementById("btnMessage").onclick = () => {
         renderMessageModal();
@@ -340,10 +357,32 @@ function afterLogin() {
                     ]
                 }
             });
+            // 注意：游戏对战连接由 game.js 的 initPeerConnection 处理
+            // 这里只处理聊天和好友相关的连接
             window.peer.on("connection", (conn) => {
+                // 如果游戏连接已存在，关闭这个聊天连接
+                if (window.conn && window.conn.open) {
+                    console.log("聊天连接忽略：游戏连接已存在");
+                    conn.close();
+                    return;
+                }
+                
                 conn.on("data", (data) => {
+                    // 游戏数据由 game.js 处理，这里只处理非游戏数据
                     if (data.type === "game") return;
+                    
+                    // 如果收到的是邀请回复，但游戏连接已存在，说明是重复消息，忽略
+                    if (data.type === "inviteReply" && window.conn && window.conn.open) {
+                        console.log("聊天连接收到 inviteReply，但游戏连接已存在，忽略");
+                        return;
+                    }
+                    
+                    console.log("聊天连接收到数据, type:", data.type, "data:", data);
+                    
                     handlePeerData(data, conn);
+                });
+                conn.on("close", () => {
+                    console.log("消息连接关闭");
                 });
             });
             window.peer.on("error", (err) => console.error("消息 Peer 错误:", err));

@@ -281,17 +281,67 @@ const Account = {
 
     // ===== 处理对战邀请回复 =====
     handleInviteReply(reply) {
+        console.log("handleInviteReply: 收到邀请回复, accepted:", reply.accepted);
         if (reply.accepted) {
+            // 如果连接已经建立（对方已连接），就不需要再显示提示
+            if (window.conn && window.conn.open) {
+                console.log("收到邀请回复，但连接已建立，忽略");
+                return;
+            }
+            // 如果游戏已经开始（技能选择阶段），忽略这个回复
+            if (window.phase === "skillSelect" || window.phase === "normal") {
+                console.log("收到邀请回复，但游戏已开始，忽略");
+                return;
+            }
             // 连接已经在 sendInvite 中初始化，这里不需要再次初始化
             // 只需等待对方连接即可
             $("modeModal").classList.remove("show");
-            alert("对方已接受邀请，等待连接...");
+            setStatus("对方已接受邀请，等待连接...");
         } else {
             const reason = reply.reason || "";
             alert(`对方拒绝了您的对战邀请${reason ? "：" + reason : ""}`);
-            if (window.conn) { try { window.conn.close(); } catch(e) {} window.conn = null; }
-            if (window._hostTimer) clearTimeout(window._hostTimer);
-            if (typeof $ === "function") $("btnBack").click();
+            
+            // 立即移除连接监听器（关键修复：防止后续触发 selSkill）
+            if (window._connHandler && window.peer && !window.peer.destroyed) {
+                try {
+                    // 使用 removeListener 确保正确移除 once 添加的监听器
+                    window.peer.removeListener("connection", window._connHandler);
+                    console.log("handleInviteReply: 已移除连接监听器");
+                } catch(e) {
+                    console.error("handleInviteReply: 移除监听器失败:", e);
+                }
+            }
+            window._connHandler = null;
+            
+            // 彻底清理所有连接资源
+            if (typeof cleanupConnection === "function") {
+                cleanupConnection();
+            } else {
+                // 如果 cleanupConnection 不可用，手动清理
+                if (window.conn) { try { window.conn.close(); } catch(e) {} window.conn = null; }
+                if (window._hostTimer) clearTimeout(window._hostTimer);
+                window._hostTimer = null;
+                if (window._heartbeat) { clearInterval(window._heartbeat); window._heartbeat = null; }
+            }
+            
+            // 关闭技能选择弹窗（如果打开的话）
+            if (typeof $ === "function") {
+                $("skillModal").classList.remove("show");
+            }
+            
+            // 重置游戏状态
+            window.mode = "local";
+            window.host = 0;
+            window.phase = "modeSelect";
+            window.isInGame = false;
+            window._skillSelectedSent = false;
+            
+            if (typeof $ === "function") {
+                $("modeModal").classList.remove("show");
+                $("createArea").style.display = "none";
+                $("joinArea").style.display = "none";
+                $("btnBack").click();
+            }
         }
     },
 

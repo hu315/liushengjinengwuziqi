@@ -39,6 +39,7 @@ window._heartbeat = null;
 window._lastPong = Date.now();
 window._skillSelectedSent = false;
 window._reconnectAttempt = 0;
+window._autoPlayTimers = [];  // 存储所有 autoPlay 定时器
 
 // ==================== 初始化 ====================
 document.addEventListener("DOMContentLoaded", function() {
@@ -52,6 +53,103 @@ document.addEventListener("DOMContentLoaded", function() {
     window.addEventListener("resize", updateBoardBackground);
 });
 
+// ==================== 通知功能 ====================
+function showNotification(title, message, type = 'chat') {
+    const container = $("notificationContainer");
+    if (!container) return;
+    
+    const notification = document.createElement("div");
+    notification.className = `notification ${type}`;
+    notification.innerHTML = `
+        <div class="notification-icon">${type === 'chat' ? '💬' : '👤'}</div>
+        <div class="notification-content">
+            <div class="notification-title">${escapeHtml(title)}</div>
+            <div class="notification-message">${escapeHtml(message)}</div>
+        </div>
+        <button class="notification-close" onclick="this.parentElement.classList.add('closing'); setTimeout(() => this.parentElement.remove(), 300);">&times;</button>
+    `;
+    
+    container.appendChild(notification);
+    
+    // 3秒后自动关闭
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.classList.add('closing');
+            setTimeout(() => notification.remove(), 300);
+        }
+    }, 5000);
+}
+
+// ==================== 聊天功能 ====================
+function sendChat(message) {
+    if (!message.trim()) return;
+    if (!window.conn || !window.conn.open) {
+        addChatMessage("系统", "连接未建立，无法发送消息", "system");
+        return;
+    }
+    sendGame("chat", { message, timestamp: Date.now() });
+    addChatMessage("我", message, "mine");
+}
+
+function addChatMessage(sender, message, type) {
+    const chatMessages = $("chatMessages");
+    if (!chatMessages) return;
+    
+    const messageElement = document.createElement("div");
+    messageElement.className = `chat-message ${type}`;
+    
+    if (type !== "system") {
+        messageElement.innerHTML = `<strong>${sender}:</strong> ${escapeHtml(message)}`;
+    } else {
+        messageElement.textContent = message;
+    }
+    
+    chatMessages.appendChild(messageElement);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    // 如果聊天面板未打开，显示通知并标记新消息
+    const chatPanel = $("chatPanel");
+    const toggleBtn = $("chatToggleBtn");
+    if (chatPanel && !chatPanel.classList.contains("show") && type === "other") {
+        showNotification(sender, message, 'chat');
+        if (toggleBtn) {
+            toggleBtn.classList.add("has-new");
+        }
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function toggleChatPanel() {
+    const panel = $("chatPanel");
+    const toggleBtn = $("chatToggleBtn");
+    if (!panel || !toggleBtn) return;
+    
+    if (panel.classList.contains("show")) {
+        panel.classList.remove("show");
+        toggleBtn.classList.remove("showing");
+    } else {
+        panel.classList.add("show");
+        toggleBtn.classList.add("showing");
+        // 移除新消息标记
+        toggleBtn.classList.remove("has-new");
+        // 自动聚焦输入框
+        $("chatInput")?.focus();
+    }
+}
+
+function showChatButton(show) {
+    const toggleBtn = $("chatToggleBtn");
+    if (toggleBtn) {
+        toggleBtn.style.display = show ? "block" : "none";
+    }
+}
+
+// ==================== 绑定事件 ====================
 function bindAllEvents() {
     $("btnStartGame").onclick = () => { $("modeModal").classList.add("show"); $("btnStartGame").style.display = "none"; };
     $("btnChallengeMode").onclick = () => { $("modeModal").classList.remove("show"); $("diffModal").classList.add("show"); $("btnStartGame").style.display = "none"; };
@@ -92,6 +190,7 @@ function bindAllEvents() {
                 ready();
             } else if (window.mode === "online") {
                 const me = window.host ? window.B : window.W;
+                console.log("skillSel: 我是", me === window.B ? "黑(B)" : "白(W)", "选择技能:", s);
                 setPlayerSkill(me, s);
                 if (!window._skillSelectedSent) {
                     window._skillSelectedSent = true;
@@ -100,9 +199,16 @@ function bindAllEvents() {
                 upDesc(); upUI();
                 $("skillTip").textContent = "已选择，等待对方...";
                 const o = window.host ? window.W : window.B;
+                console.log("skillSel: 对方技能已设置?", !!window.D[o].s);
                 if (window.D[o].s) {
+                    console.log("skillSel: 双方技能已选择，开始游戏!");
                     $("skillModal").classList.remove("show");
                     window.phase = "normal";
+                    // 联机模式下显示聊天按钮
+                    if (window.mode === "online") {
+                        showChatButton(true);
+                        addChatMessage("系统", "游戏开始！可以开始聊天了", "system");
+                    }
                     ready();
                 }
             } else {
@@ -189,6 +295,12 @@ function bindAllEvents() {
         window.wheel.style.transform = "rotate(0deg)";
         window.spinning = 0;
         $("spinBtn").disabled = false;
+        // 隐藏效果显示区域
+        const resultDisplay = $("wheelResultDisplay");
+        if (resultDisplay) {
+            resultDisplay.textContent = "";
+            resultDisplay.classList.remove("show");
+        }
     };
     $("spinBtn").onclick = () => {
         if (window.spinning) return;
@@ -203,18 +315,32 @@ function bindAllEvents() {
             const resText = WHEEL_EFFECTS[idx].fn(window.cur);
             window.wheelResult = `转盘：${resText}`;
             upUI();
+            // 在转盘上方显示效果
+            const resultDisplay = $("wheelResultDisplay");
+            if (resultDisplay) {
+                resultDisplay.textContent = resText;
+                resultDisplay.classList.add("show");
+            }
+            // 延长显示时间为2秒
             setTimeout(() => {
                 $("wheelModal").classList.remove("show");
                 window.spinning = 0;
+                // 隐藏效果显示
+                if (resultDisplay) {
+                    resultDisplay.textContent = "";
+                    resultDisplay.classList.remove("show");
+                }
                 if (window.extra > 0) {
                     window.phase = "gamblerDrop";
                     setStatus(`${window.wheelResult}\n剩余 ${window.extra} 次落子`);
-                    if (window.D[window.cur].s === "redSpider" || (window.mode === "ai" && window.cur === window.W))
-                        setTimeout(() => autoPlay(window.cur), 500);
+                    if (window.D[window.cur].s === "redSpider" || (window.mode === "ai" && window.cur === window.W)) {
+                        const timerId = setTimeout(() => autoPlay(window.cur), 500);
+                        window._autoPlayTimers.push(timerId);
+                    }
                 } else {
                     endTurn();
                 }
-            }, 1200);
+            }, 2000);
         }, 4100);
     };
     $("btnCancel").onclick = () => {
@@ -243,6 +369,11 @@ function bindAllEvents() {
         window._skillSelectedSent = false;
         $("bs").classList.remove("me");
         $("ws").classList.remove("me");
+        // 隐藏聊天按钮
+        showChatButton(false);
+        // 清空聊天消息
+        const chatMessages = $("chatMessages");
+        if (chatMessages) chatMessages.innerHTML = "";
         init();
         setStatus("请选择模式");
     };
@@ -254,14 +385,50 @@ function bindAllEvents() {
         window.mode = "online";
         initPeerConnection(r, false);
     };
+    
+    // 聊天按钮事件
+    $("chatToggleBtn").onclick = toggleChatPanel;
+    $("chatCloseBtn").onclick = toggleChatPanel;
+    $("chatSendBtn").onclick = () => {
+        const input = $("chatInput");
+        if (input) {
+            sendChat(input.value);
+            input.value = "";
+        }
+    };
+    // 按回车键发送消息
+    $("chatInput")?.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            $("chatSendBtn")?.click();
+        }
+    });
 }
 
 function cleanupConnection() {
     if (window.conn) { try { window.conn.close(); } catch(e) {} window.conn = null; }
     if (window._hostTimer) { clearTimeout(window._hostTimer); window._hostTimer = null; }
     if (window._heartbeat) { clearInterval(window._heartbeat); window._heartbeat = null; }
+    // 清理 peer 连接监听器（使用 removeListener 确保正确移除 once 添加的监听器）
+    if (window._connHandler && window.peer && !window.peer.destroyed) {
+        try { 
+            window.peer.removeListener("connection", window._connHandler); 
+            console.log("cleanupConnection: 已移除连接监听器");
+        } catch(e) { 
+            console.error("cleanupConnection: 移除监听器失败:", e);
+        }
+    }
+    window._connHandler = null;
     window._skillSelectedSent = false;
     window._reconnectAttempt = 0;
+    // 清理所有 autoPlay 定时器
+    window._autoPlayTimers.forEach(timerId => clearTimeout(timerId));
+    window._autoPlayTimers = [];
+    // 关闭技能选择弹窗（如果打开的话）
+    try {
+        const skillModal = $("skillModal");
+        if (skillModal) skillModal.classList.remove("show");
+    } catch(e) {}
 }
 
 function init() {
@@ -322,7 +489,23 @@ function updateBoardBackground() {
 }
 
 function selSkill() {
-    if (window.phase === "skillSelect") return;  // 防止重复调用
+    // 检查是否应该显示技能选择框
+    if (window.phase === "skillSelect") {
+        console.log("selSkill: 已在技能选择阶段，跳过");
+        return;
+    }
+    // 如果不是有效模式，不显示技能选择
+    const validModes = ["local", "ai", "online"];
+    if (!validModes.includes(window.mode) && !window.challengeMode) {
+        console.log("selSkill: 无效模式，跳过");
+        return;
+    }
+    // 在线模式下（非房主），必须有有效的连接
+    if (window.mode === "online" && !window.host && (!window.conn || !window.conn.open)) {
+        console.log("selSkill: 在线模式（客户端）但连接未建立，跳过");
+        return;
+    }
+    console.log("selSkill: 显示技能选择框, mode=" + window.mode + ", host=" + window.host + ", phase=" + window.phase);
     $("btnStartGame").style.display = "none";
     window.phase = "skillSelect";
     $("skillModal").classList.add("show");
@@ -330,6 +513,7 @@ function selSkill() {
         $("skillTip").textContent = `第 ${window.currentRound}/3 局 · 难度 ${window.currentDifficulty}\n请选技能`;
     } else if (window.mode === "online") {
         const me = window.host ? window.B : window.W;
+        console.log("selSkill: online mode, me=" + (me === window.B ? "黑(B)" : "白(W)"));
         $("bs").classList.toggle("me", me === window.B);
         $("ws").classList.toggle("me", me === window.W);
         $("skillTip").textContent = `选技能（${me === window.B ? "黑" : "白"}）`;
@@ -346,8 +530,14 @@ function ready() {
     updateStatusText();
     refBtn();
     upUI();
-    if (window.D[window.cur].s === "redSpider") setTimeout(() => autoPlay(window.cur), 800);
-    else if (window.mode === "ai" && window.cur === window.W) setTimeout(() => autoPlay(window.W), 800);
+    if (window.D[window.cur].s === "redSpider") {
+        const timerId = setTimeout(() => autoPlay(window.cur), 800);
+        window._autoPlayTimers.push(timerId);
+    }
+    else if (window.mode === "ai" && window.cur === window.W) {
+        const timerId = setTimeout(() => autoPlay(window.W), 800);
+        window._autoPlayTimers.push(timerId);
+    }
 }
 
 function startChallenge() {
@@ -619,7 +809,10 @@ function drop(x,y) {
     }
     if (myTurn() && window.mode !== "local") sendGame("move", {x,y, endTurn:willEndTurn, win:false, extra:window.extra, dr:window.D[window.cur].dr, se:window.D[window.cur].se});
     if (willEndTurn) endTurn();
-    else if (window.D[window.cur].s === "redSpider" || (window.mode === "ai" && window.cur === window.W)) setTimeout(()=>autoPlay(window.cur), 500);
+    else if (window.D[window.cur].s === "redSpider" || (window.mode === "ai" && window.cur === window.W)) {
+        const timerId = setTimeout(()=>autoPlay(window.cur), 500);
+        window._autoPlayTimers.push(timerId);
+    }
 }
 function sedDrop(x,y) { drop(x,y); }
 function gamblerDrop(x,y) {
@@ -637,7 +830,10 @@ function gamblerDrop(x,y) {
     else setStatus(`剩余落子 ${window.extra} 次`);
     if (myTurn() && window.mode !== "local") sendGame("move", {x,y, endTurn:willEndTurn, win:false, extra:window.extra, dr:window.D[window.cur].dr, se:window.D[window.cur].se});
     if (willEndTurn) endTurn();
-    else if (window.D[window.cur].s === "redSpider" || (window.mode === "ai" && window.cur === window.W)) setTimeout(()=>autoPlay(window.cur), 500);
+    else if (window.D[window.cur].s === "redSpider" || (window.mode === "ai" && window.cur === window.W)) {
+        const timerId = setTimeout(()=>autoPlay(window.cur), 500);
+        window._autoPlayTimers.push(timerId);
+    }
 }
 
 // ==================== 爆破（延迟爆炸） ====================
@@ -704,7 +900,10 @@ function openD(o, isC) {
         window.extra += 1;
         setStatus("领域开启！+1次落子");
         upUI();
-        if (window.D[window.cur].s === "redSpider" || (window.mode === "ai" && window.cur === window.W)) setTimeout(()=>autoPlay(window.cur), 500);
+        if (window.D[window.cur].s === "redSpider" || (window.mode === "ai" && window.cur === window.W)) {
+            const timerId = setTimeout(()=>autoPlay(window.cur), 500);
+            window._autoPlayTimers.push(timerId);
+        }
     }
 }
 function closeD() { window.dom.a=0; window.be.classList.remove("domain"); setStatus("领域消散"); refBtn(); }
@@ -805,8 +1004,14 @@ function endTurn() {
     window.sitKillSelected = [];
     refBtn(); upUI(); updateStatusText();
     if (!window.over) {
-        if (window.D[window.cur].s === "redSpider") setTimeout(()=>autoPlay(window.cur), 800);
-        else if (window.mode === "ai" && window.cur === window.W) setTimeout(()=>autoPlay(window.W), 800);
+        if (window.D[window.cur].s === "redSpider") {
+            const timerId = setTimeout(()=>autoPlay(window.cur), 800);
+            window._autoPlayTimers.push(timerId);
+        }
+        else if (window.mode === "ai" && window.cur === window.W) {
+            const timerId = setTimeout(()=>autoPlay(window.W), 800);
+            window._autoPlayTimers.push(timerId);
+        }
     }
 }
 
@@ -830,6 +1035,8 @@ function getBestMove(pl, mistakeRate=0) {
 }
 function autoPlay(pl) {
     if (window.over || window.cur !== pl) return;
+    // 联机模式下，只有当前回合的玩家才能执行
+    if (window.mode === "online" && !myTurn()) return;
     if (window.phase === "sedimentBurst") { const pos=getBestMove(pl); if (pos) sedDrop(pos.x,pos.y); return; }
     if (window.phase === "gamblerDrop") { const pos=getBestMove(pl); if (pos) gamblerDrop(pos.x,pos.y); return; }
     if (window.phase !== "normal") return;
@@ -853,7 +1060,8 @@ function autoPlay(pl) {
                         skillObj.blast--;
                         setStatus("红蜘蛛放爆破");
                         render();
-                        setTimeout(endTurn, 600);
+                        const timerId = setTimeout(endTurn, 600);
+                        window._autoPlayTimers.push(timerId);
                         return;
                     }
                 } else if (s==="thunder") {
@@ -864,7 +1072,8 @@ function autoPlay(pl) {
                     window.D[pl].se++;
                     setStatus("红蜘蛛沉淀");
                     upUI();
-                    setTimeout(endTurn, 600);
+                    const timerId = setTimeout(endTurn, 600);
+                    window._autoPlayTimers.push(timerId);
                     return;
                 }
             }
@@ -872,7 +1081,7 @@ function autoPlay(pl) {
             if (mainSkill==="blast" && window.D[pl].c>0) { const p=bestBPos(pl===window.B?window.W:window.B); if (p) { placeB(p.x,p.y,1); return; } }
             if (mainSkill==="thunder" && window.D[pl].c>0 && total()>12) { if (Math.random()<0.4) { castT(); return; } }
             if (mainSkill==="domain" && window.D[pl].c>0 && total()>8) { if (Math.random()<0.35) { castD(); return; } }
-            if (mainSkill==="sediment" && window.D[pl].se<getSedMax(pl) && total()>10) { if (Math.random()<0.3) { window.D[pl].se++; setStatus("AI沉淀"); upUI(); setTimeout(endTurn,600); return; } }
+            if (mainSkill==="sediment" && window.D[pl].se<getSedMax(pl) && total()>10) { if (Math.random()<0.3) { window.D[pl].se++; setStatus("AI沉淀"); upUI(); const timerId = setTimeout(endTurn,600); window._autoPlayTimers.push(timerId); return; } }
             if (mainSkill==="cannon" && window.D[pl].c>0 && total()>6) {
                 if (Math.random()<0.3) {
                     const empties = [];
@@ -904,7 +1113,8 @@ function castTFor(pl) {
     if (myTurn() && window.mode !== "local") sendGame("skill", {name:"thunder", hit, all, win:false, endTurn: true});
     execT(hit, all, 0);
     setStatus("红蜘蛛引雷");
-    setTimeout(endTurn, 700);
+    const timerId = setTimeout(endTurn, 700);
+    window._autoPlayTimers.push(timerId);
 }
 
 // ==================== 游戏结束 ====================
@@ -1012,7 +1222,7 @@ function createRoom() {
     initPeerConnection(null, true);
 }
 
-function initPeerConnection(targetId, isHost) {
+function initPeerConnection(targetId, isHost, onConnected) {
     if (!window.peer || window.peer.destroyed) {
         alert("网络未初始化，请重新登录");
         return;
@@ -1022,21 +1232,37 @@ function initPeerConnection(targetId, isHost) {
 
     if (isHost) {
         window.host = 1;  // 显式设置为服务端（黑方）
+        console.log("Host: 开始监听连接, userId:", Account.currentUser?.userId);
         const gameConnHandler = (conn) => {
-            if (window.conn) { conn.close(); return; }
+            console.log("Host: 收到连接, peer:", conn.peer);
+            if (window.conn) { 
+                console.log("Host: 已存在连接，关闭新连接");
+                conn.close(); return; 
+            }
             window.conn = conn;
+            // 移除监听器，避免重复触发
+            if (window._connHandler) {
+                try { window.peer.off("connection", window._connHandler); } catch(e) {}
+            }
+            console.log("Host: 连接成功, 调用 selSkill(), host=", window.host);
             setupConnection(conn);
             $("modeModal").classList.remove("show");
             $("createArea").style.display = "none";
             selSkill();
             showConnStatus("connected", "已连接");
             startHeartbeat();
+            if (onConnected) onConnected();
         };
+        window._connHandler = gameConnHandler;
+        // 使用 once 确保只处理一次连接
         window.peer.once("connection", gameConnHandler);
         window._hostTimer = setTimeout(() => {
             if (!window.conn) {
                 showConnStatus("failed", "等待超时");
-                window.peer.off("connection", gameConnHandler);
+                console.log("Host: 等待超时");
+                if (window._connHandler) {
+                    try { window.peer.off("connection", window._connHandler); } catch(e) {}
+                }
                 alert("等待对手超时，请重试");
                 $("btnBack").click();
             }
@@ -1044,15 +1270,21 @@ function initPeerConnection(targetId, isHost) {
         }, 30000);
     } else {
         window.host = 0;  // 显式设置为客户端（白方）
+        window._lastTargetId = targetId;  // 保存目标ID，用于重连
+        console.log("Guest: 连接到", targetId);
         const conn = window.peer.connect(targetId, { reliable: true });
         const timeout = setTimeout(() => {
-            if (conn.open) conn.close();
-            showConnStatus("failed", "连接超时");
-            alert("连接超时，确认对方在线");
-            $("btnBack").click();
+            if (!conn.open) {
+                console.log("Guest: 连接超时");
+                showConnStatus("failed", "连接超时");
+                alert("连接超时，确认对方在线");
+                $("btnBack").click();
+            }
         }, 30000);
         conn.on("open", () => {
             clearTimeout(timeout);
+            console.log("Guest: 连接成功, 调用 selSkill(), host=", window.host);
+            console.log("Guest: conn=", conn, "conn.open=", conn.open);
             window.conn = conn;
             setupConnection(conn);
             $("modeModal").classList.remove("show");
@@ -1060,11 +1292,12 @@ function initPeerConnection(targetId, isHost) {
             selSkill();
             showConnStatus("connected", "已连接");
             startHeartbeat();
+            if (onConnected) onConnected();
         });
         conn.on("error", (err) => {
             clearTimeout(timeout);
+            console.error("Guest 连接错误:", err);
             showConnStatus("failed", "连接失败");
-            console.error(err);
             alert("连接失败，检查网络或ID");
             $("btnBack").click();
         });
@@ -1072,8 +1305,12 @@ function initPeerConnection(targetId, isHost) {
 }
 
 function setupConnection(conn) {
+    console.log("setupConnection: 设置连接数据监听, conn.peer=", conn.peer);
     conn.on("data", (data) => {
+        console.log("setupConnection: 收到数据, type:", data.type, "conn.peer=", conn.peer);
+        console.log("setupConnection: 数据内容:", JSON.stringify(data));
         if (data.type === "game") {
+            console.log("setupConnection: 游戏数据, 转发到 handleGameMessage");
             handleGameMessage(data.data);
         } else if (data.type === "ping") {
             if (conn.open) conn.send({ type: "pong" });
@@ -1131,13 +1368,31 @@ function startHeartbeat() {
 
 function sendGame(type, payload) {
     if (!window.conn || !window.conn.open) {
+        console.log("sendGame: 连接未建立，无法发送", type);
+        console.log("sendGame: window.conn=", window.conn, "open=", window.conn?.open);
         if (window.isInGame && !window.over) attemptReconnect();
         return;
     }
+    console.log("sendGame: 发送", type, "数据:", payload);
+    console.log("sendGame: conn.peer=", window.conn.peer);
     window.conn.send({ type: "game", data: { type, payload } });
+    console.log("sendGame: 发送完成");
 }
 
 function handleGameMessage(d) {
+    console.log("handleGameMessage: 收到", d.type, "数据:", d.payload);
+    // 处理通过游戏连接发送的邀请回复
+    if (d.type === "inviteReply") {
+        console.log("handleGameMessage: 收到邀请回复, payload:", d.payload);
+        Account.handleInviteReply(d.payload);
+        return;
+    }
+    // 处理聊天消息
+    if (d.type === "chat") {
+        console.log("handleGameMessage: 收到聊天消息:", d.payload.message);
+        addChatMessage("对手", d.payload.message, "other");
+        return;
+    }
     if (d.type === "move") {
         window.board[d.payload.y][d.payload.x] = window.cur;
         if (d.payload.extra !== undefined) window.extra = d.payload.extra;
@@ -1167,12 +1422,20 @@ function handleGameMessage(d) {
         if (d.payload.endTurn) endTurn();
     } else if (d.type === "ss") {
         const o = window.host ? window.W : window.B;
+        console.log("handleGameMessage: ss - 设置对方技能, o=", o, "skill=", d.payload);
         setPlayerSkill(o, d.payload);
         upDesc(); upUI();
         const me = window.host ? window.B : window.W;
+        console.log("handleGameMessage: ss - me=", me, "mySkill=", window.D[me].s, "phase=", window.phase);
         if (window.D[me].s && window.phase === "skillSelect") {
+            console.log("handleGameMessage: ss - 双方技能已选择，开始游戏!");
             $("skillModal").classList.remove("show");
             window.phase = "normal";
+            // 联机模式下显示聊天按钮
+            if (window.mode === "online") {
+                showChatButton(true);
+                addChatMessage("系统", "游戏开始！可以开始聊天了", "system");
+            }
             ready();
         }
     } else if (d.type === "skill") {
